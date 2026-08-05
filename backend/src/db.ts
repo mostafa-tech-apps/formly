@@ -35,6 +35,7 @@ db.exec(`
     required INTEGER NOT NULL DEFAULT 0,
     options TEXT DEFAULT '[]',
     order_index INTEGER NOT NULL DEFAULT 0,
+    visibility_rules TEXT DEFAULT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
   );
@@ -62,5 +63,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_answers_submission_id ON answers(submission_id);
   CREATE INDEX IF NOT EXISTS idx_forms_slug ON forms(slug);
 `);
+
+try {
+  db.exec(`ALTER TABLE questions ADD COLUMN visibility_rules TEXT DEFAULT NULL;`);
+} catch (e: any) {
+  if (!e.message.includes('duplicate column name')) {
+    console.error('Migration error:', e);
+  }
+}
 
 export default db;

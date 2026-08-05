@@ -7,6 +7,7 @@ interface QuestionBody {
   label?: string;
   required?: boolean;
   options?: string[];
+  visibility_rules?: any;
 }
 
 interface ReorderBody {
@@ -24,7 +25,7 @@ export default async function questionRoutes(app: FastifyInstance) {
       }
 
       const id = nanoid();
-      const { type = 'text', label = '', required = false, options = [] } = req.body;
+      const { type = 'text', label = '', required = false, options = [], visibility_rules = null } = req.body;
 
       // Get next order index
       const maxOrder = db.prepare(
@@ -32,9 +33,18 @@ export default async function questionRoutes(app: FastifyInstance) {
       ).get(req.params.formId) as { max_order: number };
 
       db.prepare(`
-        INSERT INTO questions (id, form_id, type, label, required, options, order_index)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(id, req.params.formId, type, label, required ? 1 : 0, JSON.stringify(options), maxOrder.max_order + 1);
+        INSERT INTO questions (id, form_id, type, label, required, options, order_index, visibility_rules)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, 
+        req.params.formId, 
+        type, 
+        label, 
+        required ? 1 : 0, 
+        JSON.stringify(options), 
+        maxOrder.max_order + 1,
+        visibility_rules ? JSON.stringify(visibility_rules) : null
+      );
 
       // Update form timestamp
       db.prepare(`UPDATE forms SET updated_at = datetime('now') WHERE id = ?`).run(req.params.formId);
@@ -55,23 +65,40 @@ export default async function questionRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Question not found' });
       }
 
-      const { type, label, required, options } = req.body;
+      const { type, label, required, options, visibility_rules } = req.body;
 
-      db.prepare(`
-        UPDATE questions
-        SET type = COALESCE(?, type),
-            label = COALESCE(?, label),
-            required = COALESCE(?, required),
-            options = COALESCE(?, options)
-        WHERE id = ? AND form_id = ?
-      `).run(
-        type ?? null,
-        label ?? null,
-        required !== undefined ? (required ? 1 : 0) : null,
-        options !== undefined ? JSON.stringify(options) : null,
-        req.params.questionId,
-        req.params.formId
-      );
+      const updates: string[] = [];
+      const params: any[] = [];
+
+      if (type !== undefined) {
+        updates.push('type = ?');
+        params.push(type);
+      }
+      if (label !== undefined) {
+        updates.push('label = ?');
+        params.push(label);
+      }
+      if (required !== undefined) {
+        updates.push('required = ?');
+        params.push(required ? 1 : 0);
+      }
+      if (options !== undefined) {
+        updates.push('options = ?');
+        params.push(JSON.stringify(options));
+      }
+      if (visibility_rules !== undefined) {
+        updates.push('visibility_rules = ?');
+        params.push(visibility_rules === null ? null : JSON.stringify(visibility_rules));
+      }
+
+      if (updates.length > 0) {
+        params.push(req.params.questionId, req.params.formId);
+        db.prepare(`
+          UPDATE questions
+          SET ${updates.join(', ')}
+          WHERE id = ? AND form_id = ?
+        `).run(...params);
+      }
 
       // Update form timestamp
       db.prepare(`UPDATE forms SET updated_at = datetime('now') WHERE id = ?`).run(req.params.formId);

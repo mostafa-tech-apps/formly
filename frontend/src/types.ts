@@ -10,6 +10,24 @@ export interface Form {
   question_count?: number;
 }
 
+export type RuleOperator = 'equals' | 'not_equals' | 'contains' | 'not_contains' | 'is_empty' | 'is_not_empty' | 'includes' | 'not_includes';
+export type LogicGroupOperator = 'AND' | 'OR' | 'NOT';
+
+export interface VisibilityRule {
+  type: 'rule';
+  questionId: string;
+  operator: RuleOperator;
+  value?: any;
+}
+
+export interface VisibilityGroup {
+  type: 'group';
+  operator: LogicGroupOperator;
+  conditions: (VisibilityRule | VisibilityGroup)[];
+}
+
+export type VisibilityLogic = VisibilityGroup | null;
+
 export interface Question {
   id: string;
   form_id: string;
@@ -18,7 +36,17 @@ export interface Question {
   required: number | boolean;
   options: string; // JSON string of string[]
   order_index: number;
+  visibility_rules: string | null; // JSON string of VisibilityLogic
   created_at: string;
+}
+
+export function parseVisibilityRules(rules: string | null): VisibilityLogic {
+  if (!rules) return null;
+  try {
+    return JSON.parse(rules);
+  } catch {
+    return null;
+  }
 }
 
 export interface Submission {
