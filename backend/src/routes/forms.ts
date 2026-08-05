@@ -1,0 +1,100 @@
+import { FastifyInstance } from 'fastify';
+import db from '../db.js';
+import { nanoid } from 'nanoid';
+
+interface FormBody {
+  title?: string;
+  description?: string;
+  status?: 'draft' | 'published';
+}
+
+export default async function formRoutes(app: FastifyInstance) {
+  // List all forms
+  app.get('/api/forms', async () => {
+    const forms = db.prepare(`
+      SELECT f.*, 
+        (SELECT COUNT(*) FROM submissions s WHERE s.form_id = f.id) as submission_count,
+        (SELECT COUNT(*) FROM questions q WHERE q.form_id = f.id) as question_count
+      FROM forms f
+      ORDER BY f.updated_at DESC
+    `).all();
+    return { forms };
+  });
+
+  // Create a form
+  app.post('/api/forms', async () => {
+    const id = nanoid();
+    db.prepare(`INSERT INTO forms (id) VALUES (?)`).run(id);
+    const form = db.prepare(`SELECT * FROM forms WHERE id = ?`).get(id);
+    return { form };
+  });
+
+  // Get a single form with questions
+  app.get<{ Params: { id: string } }>('/api/forms/:id', async (req, reply) => {
+    const form = db.prepare(`SELECT * FROM forms WHERE id = ?`).get(req.params.id);
+    if (!form) {
+      return reply.status(404).send({ error: 'Form not found' });
+    }
+    const questions = db.prepare(
+      `SELECT * FROM questions WHERE form_id = ? ORDER BY order_index ASC`
+    ).all(req.params.id);
+    return { form, questions };
+  });
+
+  // Update a form
+  app.put<{ Params: { id: string }; Body: FormBody }>('/api/forms/:id', async (req, reply) => {
+    const form = db.prepare(`SELECT * FROM forms WHERE id = ?`).get(req.params.id) as any;
+    if (!form) {
+      return reply.status(404).send({ error: 'Form not found' });
+    }
+
+    const { title, description, status } = req.body;
+    let slug = form.slug;
+
+    // Generate slug when publishing for the first time
+    if (status === 'published' && !form.slug) {
+      slug = nanoid(10);
+    }
+
+    db.prepare(`
+      UPDATE forms 
+      SET title = COALESCE(?, title),
+          description = COALESCE(?, description),
+          status = COALESCE(?, status),
+          slug = COALESCE(?, slug),
+          updated_at = datetime('now')
+      WHERE id = ?
+    `).run(title ?? null, description ?? null, status ?? null, slug, req.params.id);
+
+    const updated = db.prepare(`
+      SELECT f.*, 
+        (SELECT COUNT(*) FROM submissions s WHERE s.form_id = f.id) as submission_count,
+        (SELECT COUNT(*) FROM questions q WHERE q.form_id = f.id) as question_count
+      FROM forms f WHERE f.id = ?
+    `).get(req.params.id);
+    return { form: updated };
+  });
+
+  // Delete a form
+  app.delete<{ Params: { id: string } }>('/api/forms/:id', async (req, reply) => {
+    const result = db.prepare(`DELETE FROM forms WHERE id = ?`).run(req.params.id);
+    if (result.changes === 0) {
+      return reply.status(404).send({ error: 'Form not found' });
+    }
+    return { success: true };
+  });
+
+  // Get a published form by slug (public)
+  app.get<{ Params: { slug: string } }>('/api/forms/public/:slug', async (req, reply) => {
+    const form = db.prepare(
+      `SELECT id, title, description, status, slug FROM forms WHERE slug = ? AND status = 'published'`
+    ).get(req.params.slug);
+    if (!form) {
+      return reply.status(404).send({ error: 'Form not found or not published' });
+    }
+    const questions = db.prepare(
+      `SELECT id, type, label, required, options, order_index FROM questions WHERE form_id = ? ORDER BY order_index ASC`
+    ).all((form as any).id);
+    return { form, questions };
+  });
+}
