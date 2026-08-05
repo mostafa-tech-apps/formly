@@ -1,0 +1,78 @@
+const API_BASE = '/api';
+
+async function request<T>(url: string, options?: RequestInit): Promise<T> {
+  const isWrite = options?.method === 'POST' || options?.method === 'PUT';
+  const hasBody = options?.body !== undefined;
+  const isMultipart = options?.body instanceof FormData;
+
+  const headers: Record<string, string> = {};
+  if (isWrite && !isMultipart) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const res = await fetch(`${API_BASE}${url}`, {
+    ...options,
+    headers: {
+      ...headers,
+      ...options?.headers,
+    },
+    body: isWrite && !hasBody && !isMultipart ? '{}' : options?.body,
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(error.error || `HTTP ${res.status}`);
+  }
+
+  return res.json();
+}
+
+// Forms
+export const api = {
+  // Forms
+  listForms: () => request<{ forms: any[] }>('/forms'),
+  createForm: () => request<{ form: any }>('/forms', { method: 'POST' }),
+  getForm: (id: string) => request<{ form: any; questions: any[] }>(`/forms/${id}`),
+  updateForm: (id: string, data: any) =>
+    request<{ form: any }>(`/forms/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteForm: (id: string) =>
+    request<{ success: boolean }>(`/forms/${id}`, { method: 'DELETE' }),
+
+  // Public forms
+  getPublicForm: (slug: string) =>
+    request<{ form: any; questions: any[] }>(`/forms/public/${slug}`),
+  submitForm: (slug: string, formData: FormData) =>
+    fetch(`${API_BASE}/forms/public/${slug}/submit`, { method: 'POST', body: formData })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Submission failed');
+        return data;
+      }),
+
+  // Questions
+  addQuestion: (formId: string, data: any) =>
+    request<{ question: any }>(`/forms/${formId}/questions`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateQuestion: (formId: string, questionId: string, data: any) =>
+    request<{ question: any }>(`/forms/${formId}/questions/${questionId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteQuestion: (formId: string, questionId: string) =>
+    request<{ success: boolean }>(`/forms/${formId}/questions/${questionId}`, {
+      method: 'DELETE',
+    }),
+  reorderQuestions: (formId: string, questionIds: string[]) =>
+    request<{ questions: any[] }>(`/forms/${formId}/questions/reorder`, {
+      method: 'PUT',
+      body: JSON.stringify({ questionIds }),
+    }),
+
+  // Submissions
+  listSubmissions: (formId: string) =>
+    request<{ submissions: any[] }>(`/forms/${formId}/submissions`),
+  getSubmission: (formId: string, submissionId: string) =>
+    request<{ submission: any; answers: any[] }>(`/forms/${formId}/submissions/${submissionId}`),
+};
