@@ -27,7 +27,9 @@ test('signup logs the user in and shows an empty dashboard', async ({ page }) =>
 
 test('creating a form shows it on the dashboard', async ({ page }) => {
   await signup(page, uniqueEmail());
-  await page.getByRole('button', { name: 'New Form' }).click();
+  // The dashboard starts empty, so only the empty-state "Create Form" button
+  // is shown — "New Form" only appears once at least one form exists.
+  await page.getByRole('button', { name: 'Create Form' }).click();
   await expect(page).toHaveURL(/\/forms\/.+\/edit$/);
 
   await page.getByText('Back to Dashboard').click();
@@ -38,7 +40,7 @@ test('creating a form shows it on the dashboard', async ({ page }) => {
 
 test('a second account does not see the first account\'s forms', async ({ page }) => {
   await signup(page, uniqueEmail());
-  await page.getByRole('button', { name: 'New Form' }).click();
+  await page.getByRole('button', { name: 'Create Form' }).click();
   await expect(page).toHaveURL(/\/forms\/.+\/edit$/);
   await page.getByText('Back to Dashboard').click();
   await expect(page.locator('.form-card')).toHaveCount(1);
