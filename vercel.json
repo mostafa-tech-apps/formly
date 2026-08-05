@@ -3,19 +3,12 @@
         "frontend": {
             "root": "frontend",
             "framework": "vite"
-        },
-        "backend": {
-            "root": "backend",
-            "entrypoint": "src/index.ts"
         }
     },
     "rewrites": [
         {
-            "source": "/api(/.*)?",
-            "destination": {
-                "type": "service",
-                "service": "backend"
-            }
+            "source": "/api/(.*)",
+            "destination": "https://formly.fly.dev/api/$1"
         },
         {
             "source": "/(.*)",
