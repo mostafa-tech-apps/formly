@@ -11,6 +11,10 @@
             "destination": "https://formly-4gbd.onrender.com/api/$1"
         },
         {
+            "source": "/mcp",
+            "destination": "https://formly-4gbd.onrender.com/mcp"
+        },
+        {
             "source": "/(.*)",
             "destination": {
                 "type": "service",

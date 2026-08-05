@@ -24,6 +24,7 @@ Built with **React**, **Vite**, **TypeScript** on the frontend, and **Fastify** 
 - **Public Submissions:** Dedicated, unauthenticated pages for users to view and fill out forms. 
 - **Analytics & Submissions:** Dashboard to view all gathered responses and file uploads.
 - **Dark Mode UI:** Sleek, premium aesthetic with smooth micro-animations.
+- **MCP Server:** The backend exposes an MCP endpoint at `/mcp`, so any MCP client (Claude Code, Claude Desktop) can create and manage forms through natural language. See [MCP Server](#mcp-server) below.
 
 ## Project Structure
 
@@ -88,6 +89,38 @@ The backend relies on SQLite and stores its database locally.
 4. **Conditional Logic:** While editing a question, switch to the "Conditional Logic" tab to add visibility rules based on the previous questions in the form.
 5. **Publish:** Toggle the status switch to "Published" to generate a public link.
 6. **Share:** Copy the URL and share it to start collecting submissions!
+
+## MCP Server
+
+The Fastify backend hosts an MCP (Model Context Protocol) server at `/mcp`, using the
+Streamable HTTP transport. It exposes 11 tools that mirror the REST API one-to-one —
+`list_forms`, `get_form`, `create_form`, `update_form`, `delete_form`, `add_question`,
+`update_question`, `delete_question`, `reorder_questions`, `list_submissions`, and
+`get_submission` — implemented in `backend/src/routes/mcp.ts` by calling the same route
+handlers in-process via `app.inject()`, so there's no separate copy of the business logic
+(slug generation, publish rules, etc.) to keep in sync.
+
+Connect from Claude Code:
+
+```bash
+claude mcp add --transport http formly https://formly-4gbd.onrender.com/mcp
+```
+
+Or add to an MCP client config directly:
+
+```json
+{
+  "mcpServers": {
+    "formly": {
+      "type": "http",
+      "url": "https://formly-4gbd.onrender.com/mcp"
+    }
+  }
+}
+```
+
+There's no auth on the API, so the MCP server has the same access anyone with the URL
+has — full read/write on every form.
 
 ## Technical Notes
 

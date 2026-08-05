@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import formRoutes from './routes/forms.js';
 import questionRoutes from './routes/questions.js';
 import submissionRoutes from './routes/submissions.js';
+import mcpRoutes from './routes/mcp.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -43,6 +44,7 @@ await app.register(fastifyStatic, {
 await app.register(formRoutes);
 await app.register(questionRoutes);
 await app.register(submissionRoutes);
+await app.register(mcpRoutes);
 
 // Health checks
 app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
