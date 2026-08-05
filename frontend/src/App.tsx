@@ -1,4 +1,5 @@
 import { Routes, Route, Link, useLocation } from 'react-router-dom';
+import { LayoutTemplate } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import FormBuilder from './pages/FormBuilder';
 import Submissions from './pages/Submissions';
@@ -10,7 +11,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
       <header className="app-header">
-        <Link to="/" className="app-logo">◆ FormCraft</Link>
+        <Link to="/" className="app-logo"><LayoutTemplate size={20} strokeWidth={2} /> FormCraft</Link>
         <nav className="app-nav">
           <Link to="/" className={location.pathname === '/' ? 'active' : ''}>Dashboard</Link>
         </nav>

@@ -4,6 +4,17 @@ A modern, full-stack application that allows users to create dynamic forms, add 
 
 Built with **React**, **Vite**, **TypeScript** on the frontend, and **Fastify** with **SQLite** on the backend.
 
+## Table of Contents
+
+- [Features](#features)
+- [Project Structure](#project-structure)
+- [Prerequisites](#prerequisites)
+- [Setup & Installation](#setup--installation)
+  - [1. Backend Setup](#1-backend-setup)
+  - [2. Frontend Setup](#2-frontend-setup)
+- [Usage Guide](#usage-guide)
+- [Technical Notes](#technical-notes)
+
 ## Features
 
 - **Form Management:** Create, list, rename, and delete forms.
