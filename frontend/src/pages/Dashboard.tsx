@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, FileText, Trash2, ExternalLink, BarChart3 } from 'lucide-react';
+import { Plus, FileText, Trash2, ExternalLink, ClipboardCopy, BarChart3 } from 'lucide-react';
 import { api } from '../api/client';
 import type { Form } from '../types';
 
@@ -49,7 +49,11 @@ export default function Dashboard() {
     }
   };
 
-
+  const copyUrl = (e: React.MouseEvent, slug: string) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(`${window.location.origin}/f/${slug}`);
+    showToast('URL copied to clipboard');
+  };
 
   if (loading) return <div className="loading"><div className="spinner" /></div>;
 
@@ -80,9 +84,21 @@ export default function Dashboard() {
             <div key={form.id} className="card form-card" onClick={() => navigate(`/forms/${form.id}/edit`)}>
               <div className="form-card-header">
                 <div className="form-card-title">{form.title}</div>
-                <span className={`badge ${form.status === 'published' ? 'badge-published' : 'badge-draft'}`}>
-                  {form.status}
-                </span>
+                <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
+                  {form.status === 'published' && form.slug && (
+                    <button 
+                      className="btn-icon" 
+                      style={{ width: 28, height: 28, borderRadius: 'var(--radius-sm)' }} 
+                      onClick={(e) => copyUrl(e, form.slug!)} 
+                      title="Copy public link"
+                    >
+                      <ClipboardCopy size={13} />
+                    </button>
+                  )}
+                  <span className={`badge ${form.status === 'published' ? 'badge-published' : 'badge-draft'}`}>
+                    {form.status}
+                  </span>
+                </div>
               </div>
               {form.description && (
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
