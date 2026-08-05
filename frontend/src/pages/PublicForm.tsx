@@ -2,13 +2,14 @@ import { useState, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Upload, CheckCircle, ArrowLeft, ArrowRight } from 'lucide-react';
 import { api } from '../api/client';
+import type { PublicFormMeta } from '../api/client';
 import type { Question, Step } from '../types';
 import { parseOptions, isRequired, parseVisibilityRules } from '../types';
 import { evaluateLogic } from '../logicEvaluator';
 
 export default function PublicForm() {
   const { slug } = useParams<{ slug: string }>();
-  const [form, setForm] = useState<any>(null);
+  const [form, setForm] = useState<PublicFormMeta | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [steps, setSteps] = useState<Step[]>([]);
   const [stepIndex, setStepIndex] = useState(0);
@@ -99,6 +100,7 @@ export default function PublicForm() {
   if (loading) return <div className="public-page"><div className="loading"><div className="spinner" /></div></div>;
   if (notFound) return <div className="public-page"><div className="public-form-container"><div className="success-page"><h2>Form not found</h2><p>This form may have been unpublished or deleted.</p></div></div></div>;
   if (submitted) return <div className="public-page"><div className="public-form-container"><div className="success-page"><div className="success-icon"><CheckCircle size={36} /></div><h2>Thank you!</h2><p>Your response has been submitted successfully.</p></div></div></div>;
+  if (!form) return null;
 
   const renderQuestion = (q: Question) => (
     <div key={q.id} className="public-question">

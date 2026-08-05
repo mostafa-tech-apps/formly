@@ -2,10 +2,11 @@ import { useRef, useState } from 'react';
 import { X, Sparkles, ArrowLeft, Loader2, Check, ExternalLink, Plus, Trash2 } from 'lucide-react';
 import { api, streamPlanForm } from '../api/client';
 import type { FormPlan, PlannedQuestion } from '../api/client';
+import type { Form } from '../types';
 
 interface Props {
   onClose: () => void;
-  onCreated: (form: any) => void;
+  onCreated: (form: Form) => void;
 }
 
 type TimelinePhase = 'understanding' | 'thinking' | 'planning' | 'approval' | 'building' | 'verify' | 'publishing' | 'ready';
@@ -39,7 +40,7 @@ export default function GenerateFormTray({ onClose, onCreated }: Props) {
   const [clarifyAnswer, setClarifyAnswer] = useState('');
 
   const [plan, setPlan] = useState<FormPlan | null>(null);
-  const [finalForm, setFinalForm] = useState<any | null>(null);
+  const [finalForm, setFinalForm] = useState<Form | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const currentPhaseRef = useRef<TimelinePhase>('understanding');

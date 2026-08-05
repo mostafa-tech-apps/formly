@@ -30,7 +30,10 @@ export type VisibilityLogic = VisibilityGroup | null;
 
 export interface Question {
   id: string;
-  form_id: string;
+  // Omitted from the public (unauthenticated) form endpoint's response, so
+  // these two stay optional even though every authenticated route sets them.
+  form_id?: string;
+  created_at?: string;
   step_id: string | null;
   type: 'text' | 'multiple_choice' | 'file_upload';
   label: string;
@@ -38,15 +41,15 @@ export interface Question {
   options: string; // JSON string of string[]
   order_index: number;
   visibility_rules: string | null; // JSON string of VisibilityLogic
-  created_at: string;
 }
 
 export interface Step {
   id: string;
-  form_id: string;
+  // See the matching note on Question — absent from the public endpoint.
+  form_id?: string;
+  created_at?: string;
   title: string;
   order_index: number;
-  created_at?: string;
 }
 
 export function parseVisibilityRules(rules: string | null): VisibilityLogic {

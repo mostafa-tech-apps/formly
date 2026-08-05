@@ -71,7 +71,7 @@ export default function Dashboard() {
     }
   };
 
-  const onFormGenerated = (form: any) => {
+  const onFormGenerated = (form: Form) => {
     setShowGenerate(false);
     navigate(`/forms/${form.id}/edit`);
   };

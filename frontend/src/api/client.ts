@@ -1,4 +1,30 @@
+import type { Form, Question, Step, Submission, Answer, VisibilityLogic } from '../types';
+
 const API_BASE = '/api';
+
+// The public form endpoint omits a few columns present on the authenticated
+// Form row (created_at/updated_at, submission_count/question_count) — this
+// is what it actually returns, not a loosened version of Form.
+export interface PublicFormMeta {
+  id: string;
+  title: string;
+  description: string;
+  status: 'draft' | 'published';
+  slug: string;
+}
+
+// Request-body shape for creating/updating a question — mirrors the backend's
+// QuestionBody (backend/src/routes/questions.ts). Distinct from Question
+// itself: options/visibility_rules travel as structured values here, not the
+// JSON-stringified form they're stored/returned in.
+export interface QuestionInput {
+  type?: 'text' | 'multiple_choice' | 'file_upload';
+  label?: string;
+  required?: boolean;
+  options?: string[];
+  visibility_rules?: VisibilityLogic;
+  step_id?: string | null;
+}
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const isWrite = options?.method === 'POST' || options?.method === 'PUT';
@@ -47,33 +73,33 @@ export const api = {
   revokeApiToken: () => request<{ success: boolean }>('/auth/token', { method: 'DELETE' }),
 
   // Forms
-  listForms: () => request<{ forms: any[] }>('/forms'),
-  createForm: () => request<{ form: any }>('/forms', { method: 'POST' }),
-  getForm: (id: string) => request<{ form: any; questions: any[]; steps: any[] }>(`/forms/${id}`),
-  updateForm: (id: string, data: any) =>
-    request<{ form: any }>(`/forms/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  listForms: () => request<{ forms: Form[] }>('/forms'),
+  createForm: () => request<{ form: Form }>('/forms', { method: 'POST' }),
+  getForm: (id: string) => request<{ form: Form; questions: Question[]; steps: Step[] }>(`/forms/${id}`),
+  updateForm: (id: string, data: Partial<Pick<Form, 'title' | 'description' | 'status'>>) =>
+    request<{ form: Form }>(`/forms/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteForm: (id: string) =>
     request<{ success: boolean }>(`/forms/${id}`, { method: 'DELETE' }),
 
   // Public forms
   getPublicForm: (slug: string) =>
-    request<{ form: any; questions: any[]; steps: any[] }>(`/forms/public/${slug}`),
+    request<{ form: PublicFormMeta; questions: Question[]; steps: Step[] }>(`/forms/public/${slug}`),
   submitForm: (slug: string, formData: FormData) =>
     fetch(`${API_BASE}/forms/public/${slug}/submit`, { method: 'POST', body: formData })
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Submission failed');
-        return data;
+        return data as { success: boolean; submissionId: string };
       }),
 
   // Questions
-  addQuestion: (formId: string, data: any) =>
-    request<{ question: any }>(`/forms/${formId}/questions`, {
+  addQuestion: (formId: string, data: QuestionInput) =>
+    request<{ question: Question }>(`/forms/${formId}/questions`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  updateQuestion: (formId: string, questionId: string, data: any) =>
-    request<{ question: any }>(`/forms/${formId}/questions/${questionId}`, {
+  updateQuestion: (formId: string, questionId: string, data: QuestionInput) =>
+    request<{ question: Question }>(`/forms/${formId}/questions/${questionId}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
@@ -82,26 +108,26 @@ export const api = {
       method: 'DELETE',
     }),
   reorderQuestions: (formId: string, questionIds: string[]) =>
-    request<{ questions: any[] }>(`/forms/${formId}/questions/reorder`, {
+    request<{ questions: Question[] }>(`/forms/${formId}/questions/reorder`, {
       method: 'PUT',
       body: JSON.stringify({ questionIds }),
     }),
 
   // Steps
   addStep: (formId: string, title: string) =>
-    request<{ step: any }>(`/forms/${formId}/steps`, { method: 'POST', body: JSON.stringify({ title }) }),
+    request<{ step: Step }>(`/forms/${formId}/steps`, { method: 'POST', body: JSON.stringify({ title }) }),
   updateStep: (formId: string, stepId: string, title: string) =>
-    request<{ step: any }>(`/forms/${formId}/steps/${stepId}`, { method: 'PUT', body: JSON.stringify({ title }) }),
+    request<{ step: Step }>(`/forms/${formId}/steps/${stepId}`, { method: 'PUT', body: JSON.stringify({ title }) }),
   deleteStep: (formId: string, stepId: string) =>
     request<{ success: boolean }>(`/forms/${formId}/steps/${stepId}`, { method: 'DELETE' }),
   reorderSteps: (formId: string, stepIds: string[]) =>
-    request<{ steps: any[] }>(`/forms/${formId}/steps/reorder`, { method: 'PUT', body: JSON.stringify({ stepIds }) }),
+    request<{ steps: Step[] }>(`/forms/${formId}/steps/reorder`, { method: 'PUT', body: JSON.stringify({ stepIds }) }),
 
   // Submissions
   listSubmissions: (formId: string) =>
-    request<{ submissions: any[] }>(`/forms/${formId}/submissions`),
+    request<{ submissions: Submission[] }>(`/forms/${formId}/submissions`),
   getSubmission: (formId: string, submissionId: string) =>
-    request<{ submission: any; answers: any[] }>(`/forms/${formId}/submissions/${submissionId}`),
+    request<{ submission: Submission; answers: Answer[] }>(`/forms/${formId}/submissions/${submissionId}`),
 
   // AI
   improveQuestion: (label: string) =>
@@ -109,7 +135,7 @@ export const api = {
   suggestOptions: (label: string) =>
     request<{ options: string[] }>('/ai/suggest-options', { method: 'POST', body: JSON.stringify({ label }) }),
   createFormFromPlan: (plan: FormPlan) =>
-    request<{ form: any }>('/ai/create-form', { method: 'POST', body: JSON.stringify(plan) }),
+    request<{ form: Form }>('/ai/create-form', { method: 'POST', body: JSON.stringify(plan) }),
 };
 
 // Streams the agentic form-planning pipeline. Not on the `api` object since it's
