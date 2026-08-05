@@ -121,7 +121,7 @@ production). Without it, the AI endpoints fail gracefully — a clean `502` for 
 endpoints, or an `error` SSE event for the streaming one — instead of crashing; the rest
 of the app works normally.
 
-Runs on `inclusionai/ling-3.0-flash:free` via [OpenRouter](https://openrouter.ai), through
+Runs on `cohere/north-mini-code:free` via [OpenRouter](https://openrouter.ai), through
 LangChain's `ChatOpenAI` pointed at OpenRouter's OpenAI-compatible endpoint
 (`backend/src/ai.ts`, `backend/src/agent.ts`), with structured JSON output for every
 call so responses always match a schema. Every user-controlled input (prompts,

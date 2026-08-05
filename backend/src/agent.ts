@@ -6,7 +6,7 @@ import { INJECTION_GUARDRAIL, wrapUntrusted } from './promptSafety.js';
 
 const STRUCTURED_OUTPUT_ATTEMPTS = 3;
 
-const OPENROUTER_MODEL = 'inclusionai/ling-3.0-flash:free';
+const OPENROUTER_MODEL = 'cohere/north-mini-code:free';
 
 let model: ChatOpenAI | null = null;
 
