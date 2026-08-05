@@ -8,7 +8,7 @@
     "rewrites": [
         {
             "source": "/api/(.*)",
-            "destination": "https://formly.fly.dev/api/$1"
+            "destination": "https://formly-4gbd.onrender.com/api/$1"
         },
         {
             "source": "/(.*)",

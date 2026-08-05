@@ -22,7 +22,7 @@ const app = Fastify({
 
 // Register plugins
 await app.register(cors, {
-  origin: ['http://localhost:5173', 'http://localhost:3000'],
+  origin: ['http://localhost:5173', 'http://localhost:3000', 'https://formly-ruby-eight.vercel.app'],
   credentials: true
 });
 
@@ -44,8 +44,9 @@ await app.register(formRoutes);
 await app.register(questionRoutes);
 await app.register(submissionRoutes);
 
-// Health check
+// Health checks
 app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+app.get('/healthz', async () => ({ status: 'ok' }));
 
 // Start server
 const start = async () => {
