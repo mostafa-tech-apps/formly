@@ -69,9 +69,6 @@ export default function GenerateFormModal({ onClose, onCreated }: Props) {
                 placeholder="e.g. A customer feedback form for a bakery, asking about their order, food quality, and whether they'd recommend us."
                 autoFocus
               />
-              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-                For a large form, the AI may split it into multiple steps. You'll review the plan before anything is created.
-              </p>
             </div>
           ) : (
             <div>
