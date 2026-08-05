@@ -9,6 +9,7 @@ interface QuestionBody {
   required?: boolean;
   options?: string[];
   visibility_rules?: any;
+  step_id?: string | null;
 }
 
 interface ReorderBody {
@@ -27,7 +28,7 @@ export default async function questionRoutes(app: FastifyInstance) {
       }
 
       const id = nanoid();
-      const { type = 'text', label = '', required = false, options = [], visibility_rules = null } = req.body;
+      const { type = 'text', label = '', required = false, options = [], visibility_rules = null, step_id = null } = req.body;
 
       // Get next order index
       const maxOrder = db.prepare(
@@ -35,17 +36,18 @@ export default async function questionRoutes(app: FastifyInstance) {
       ).get(req.params.formId) as { max_order: number };
 
       db.prepare(`
-        INSERT INTO questions (id, form_id, type, label, required, options, order_index, visibility_rules)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO questions (id, form_id, type, label, required, options, order_index, visibility_rules, step_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        id, 
-        req.params.formId, 
-        type, 
-        label, 
-        required ? 1 : 0, 
-        JSON.stringify(options), 
+        id,
+        req.params.formId,
+        type,
+        label,
+        required ? 1 : 0,
+        JSON.stringify(options),
         maxOrder.max_order + 1,
-        visibility_rules ? JSON.stringify(visibility_rules) : null
+        visibility_rules ? JSON.stringify(visibility_rules) : null,
+        step_id
       );
 
       // Update form timestamp
@@ -72,7 +74,7 @@ export default async function questionRoutes(app: FastifyInstance) {
         return reply.status(404).send({ error: 'Question not found' });
       }
 
-      const { type, label, required, options, visibility_rules } = req.body;
+      const { type, label, required, options, visibility_rules, step_id } = req.body;
 
       const updates: string[] = [];
       const params: any[] = [];
@@ -96,6 +98,10 @@ export default async function questionRoutes(app: FastifyInstance) {
       if (visibility_rules !== undefined) {
         updates.push('visibility_rules = ?');
         params.push(visibility_rules === null ? null : JSON.stringify(visibility_rules));
+      }
+      if (step_id !== undefined) {
+        updates.push('step_id = ?');
+        params.push(step_id);
       }
 
       if (updates.length > 0) {

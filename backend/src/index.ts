@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
@@ -9,8 +10,10 @@ import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
 import formRoutes from './routes/forms.js';
 import questionRoutes from './routes/questions.js';
+import stepRoutes from './routes/steps.js';
 import submissionRoutes from './routes/submissions.js';
 import mcpRoutes from './routes/mcp.js';
+import aiRoutes from './routes/ai.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -48,8 +51,10 @@ await app.register(fastifyStatic, {
 await app.register(authRoutes);
 await app.register(formRoutes);
 await app.register(questionRoutes);
+await app.register(stepRoutes);
 await app.register(submissionRoutes);
 await app.register(mcpRoutes);
+await app.register(aiRoutes);
 
 // Health checks
 app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));

@@ -53,7 +53,10 @@ export default async function formRoutes(app: FastifyInstance) {
     const questions = db.prepare(
       `SELECT * FROM questions WHERE form_id = ? ORDER BY order_index ASC`
     ).all(req.params.id);
-    return { form, questions };
+    const steps = db.prepare(
+      `SELECT * FROM steps WHERE form_id = ? ORDER BY order_index ASC`
+    ).all(req.params.id);
+    return { form, questions, steps };
   });
 
   // Update a form (must be owned by the caller)
@@ -114,8 +117,11 @@ export default async function formRoutes(app: FastifyInstance) {
       return reply.status(404).send({ error: 'Form not found or not published' });
     }
     const questions = db.prepare(
-      `SELECT id, type, label, required, options, order_index FROM questions WHERE form_id = ? ORDER BY order_index ASC`
+      `SELECT id, type, label, required, options, order_index, step_id, visibility_rules FROM questions WHERE form_id = ? ORDER BY order_index ASC`
     ).all((form as any).id);
-    return { form, questions };
+    const steps = db.prepare(
+      `SELECT id, title, order_index FROM steps WHERE form_id = ? ORDER BY order_index ASC`
+    ).all((form as any).id);
+    return { form, questions, steps };
   });
 }

@@ -31,6 +31,7 @@ export type VisibilityLogic = VisibilityGroup | null;
 export interface Question {
   id: string;
   form_id: string;
+  step_id: string | null;
   type: 'text' | 'multiple_choice' | 'file_upload';
   label: string;
   required: number | boolean;
@@ -38,6 +39,14 @@ export interface Question {
   order_index: number;
   visibility_rules: string | null; // JSON string of VisibilityLogic
   created_at: string;
+}
+
+export interface Step {
+  id: string;
+  form_id: string;
+  title: string;
+  order_index: number;
+  created_at?: string;
 }
 
 export function parseVisibilityRules(rules: string | null): VisibilityLogic {

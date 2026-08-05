@@ -9,6 +9,10 @@ build/
 # SQLite databases
 backend/data/
 
+# Environment variables
+.env
+backend/.env
+
 # Uploaded files
 backend/uploads/*
 !backend/uploads/.gitkeep

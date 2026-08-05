@@ -46,7 +46,7 @@ function buildMcpServer(app: FastifyInstance, apiToken: string) {
 
   server.tool(
     'get_form',
-    'Get a single form by id, including its full question list.',
+    'Get a single form by id, including its full question list and steps (for multi-step forms).',
     { formId: z.string().describe('The form id') },
     tool(async ({ formId }: { formId: string }) => call('GET', `/api/forms/${formId}`))
   );
@@ -94,22 +94,24 @@ function buildMcpServer(app: FastifyInstance, apiToken: string) {
 
   server.tool(
     'add_question',
-    'Add a question to a form. The "options" field is only used for multiple_choice questions.',
+    'Add a question to a form. The "options" field is only used for multiple_choice questions. ' +
+      'Pass stepId to place it in a specific step of a multi-step form; omit it to leave the question unassigned.',
     {
       formId: z.string(),
       type: questionType,
       label: z.string(),
       required: z.boolean().optional(),
       options: z.array(z.string()).optional().describe('Choice labels, for multiple_choice questions only'),
+      stepId: z.string().optional().describe('The step this question belongs to, from get_form\'s steps list'),
     },
-    tool(async ({ formId, ...body }: { formId: string; type: string; label: string; required?: boolean; options?: string[] }) =>
-      call('POST', `/api/forms/${formId}/questions`, body)
+    tool(async ({ formId, stepId, ...body }: { formId: string; type: string; label: string; required?: boolean; options?: string[]; stepId?: string }) =>
+      call('POST', `/api/forms/${formId}/questions`, { ...body, step_id: stepId })
     )
   );
 
   server.tool(
     'update_question',
-    'Update an existing question\'s type, label, required flag, or options.',
+    'Update an existing question\'s type, label, required flag, options, or step assignment.',
     {
       formId: z.string(),
       questionId: z.string(),
@@ -117,9 +119,10 @@ function buildMcpServer(app: FastifyInstance, apiToken: string) {
       label: z.string().optional(),
       required: z.boolean().optional(),
       options: z.array(z.string()).optional(),
+      stepId: z.string().nullable().optional().describe('Move the question to this step, or null to unassign it'),
     },
-    tool(async ({ formId, questionId, ...body }: { formId: string; questionId: string; type?: string; label?: string; required?: boolean; options?: string[] }) =>
-      call('PUT', `/api/forms/${formId}/questions/${questionId}`, body)
+    tool(async ({ formId, questionId, stepId, ...body }: { formId: string; questionId: string; type?: string; label?: string; required?: boolean; options?: string[]; stepId?: string | null }) =>
+      call('PUT', `/api/forms/${formId}/questions/${questionId}`, stepId !== undefined ? { ...body, step_id: stepId } : body)
     )
   );
 
@@ -138,6 +141,38 @@ function buildMcpServer(app: FastifyInstance, apiToken: string) {
     { formId: z.string(), questionIds: z.array(z.string()) },
     tool(async ({ formId, questionIds }: { formId: string; questionIds: string[] }) =>
       call('PUT', `/api/forms/${formId}/questions/reorder`, { questionIds })
+    )
+  );
+
+  server.tool(
+    'add_step',
+    'Add a step (page) to a form, for multi-step forms. Steps display in the order they are created; use reorder_steps to change that.',
+    { formId: z.string(), title: z.string().optional() },
+    tool(async ({ formId, title }: { formId: string; title?: string }) => call('POST', `/api/forms/${formId}/steps`, { title }))
+  );
+
+  server.tool(
+    'update_step',
+    'Rename a step.',
+    { formId: z.string(), stepId: z.string(), title: z.string() },
+    tool(async ({ formId, stepId, title }: { formId: string; stepId: string; title: string }) =>
+      call('PUT', `/api/forms/${formId}/steps/${stepId}`, { title })
+    )
+  );
+
+  server.tool(
+    'delete_step',
+    'Delete a step. Its questions fall back to the nearest preceding step, or become unassigned if it was the first/only step.',
+    { formId: z.string(), stepId: z.string() },
+    tool(async ({ formId, stepId }: { formId: string; stepId: string }) => call('DELETE', `/api/forms/${formId}/steps/${stepId}`))
+  );
+
+  server.tool(
+    'reorder_steps',
+    'Set the display order of a form\'s steps by passing all step ids in the desired order.',
+    { formId: z.string(), stepIds: z.array(z.string()) },
+    tool(async ({ formId, stepIds }: { formId: string; stepIds: string[] }) =>
+      call('PUT', `/api/forms/${formId}/steps/reorder`, { stepIds })
     )
   );
 

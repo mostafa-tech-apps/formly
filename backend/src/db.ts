@@ -44,9 +44,19 @@ db.exec(`
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS steps (
+    id TEXT PRIMARY KEY,
+    form_id TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    order_index INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS questions (
     id TEXT PRIMARY KEY,
     form_id TEXT NOT NULL,
+    step_id TEXT DEFAULT NULL,
     type TEXT NOT NULL CHECK(type IN ('text', 'multiple_choice', 'file_upload')),
     label TEXT NOT NULL DEFAULT '',
     required INTEGER NOT NULL DEFAULT 0,
@@ -54,7 +64,8 @@ db.exec(`
     order_index INTEGER NOT NULL DEFAULT 0,
     visibility_rules TEXT DEFAULT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE
+    FOREIGN KEY (form_id) REFERENCES forms(id) ON DELETE CASCADE,
+    FOREIGN KEY (step_id) REFERENCES steps(id) ON DELETE SET NULL
   );
 
   CREATE TABLE IF NOT EXISTS submissions (
@@ -80,6 +91,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_answers_submission_id ON answers(submission_id);
   CREATE INDEX IF NOT EXISTS idx_forms_slug ON forms(slug);
   CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
+  CREATE INDEX IF NOT EXISTS idx_steps_form_id ON steps(form_id);
 `);
 
 function migrate(sql: string) {
@@ -94,8 +106,12 @@ function migrate(sql: string) {
 
 migrate(`ALTER TABLE questions ADD COLUMN visibility_rules TEXT DEFAULT NULL;`);
 migrate(`ALTER TABLE forms ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE;`);
+migrate(`ALTER TABLE questions ADD COLUMN step_id TEXT DEFAULT NULL REFERENCES steps(id) ON DELETE SET NULL;`);
 
-// Must run after the user_id migration above, since forms may not have had that column yet.
-db.exec(`CREATE INDEX IF NOT EXISTS idx_forms_user_id ON forms(user_id);`);
+// Must run after the migrations above, since the referenced columns may not have existed yet.
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_forms_user_id ON forms(user_id);
+  CREATE INDEX IF NOT EXISTS idx_questions_step_id ON questions(step_id);
+`);
 
 export default db;
