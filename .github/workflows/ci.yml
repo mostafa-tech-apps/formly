@@ -40,6 +40,14 @@ jobs:
         run: npx tsc --noEmit
         working-directory: frontend
 
+      - name: Lint backend
+        run: npm run lint
+        working-directory: backend
+
+      - name: Lint frontend
+        run: npm run lint
+        working-directory: frontend
+
       - name: Backend unit tests
         run: npm test
         working-directory: backend
