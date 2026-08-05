@@ -13,18 +13,24 @@ Built with **React**, **Vite**, **TypeScript** on the frontend, and **Fastify** 
   - [1. Backend Setup](#1-backend-setup)
   - [2. Frontend Setup](#2-frontend-setup)
 - [Usage Guide](#usage-guide)
+- [Accounts & Auth](#accounts--auth)
+- [AI Helper](#ai-helper)
+- [MCP Server](#mcp-server)
+- [Testing](#testing)
 - [Technical Notes](#technical-notes)
 
 ## Features
 
 - **Form Management:** Create, list, rename, and delete forms.
 - **Dynamic Questions:** Support for Text Input, Multiple Choice, and File Uploads.
+- **Multi-Step Forms:** Group questions into steps with their own titles, reorder or delete steps, and drag questions between them. Published multi-step forms get Next/Back navigation and a progress bar on the public page; forms with no steps render as a single page exactly as before.
 - **Advanced Conditional Logic:** Build infinite nested boolean groups (AND, OR, NOT) to dynamically show/hide questions based on previous answers. 
 - **Publishing System:** Toggle forms between "Draft" and "Published" to generate a unique public URL.
 - **Public Submissions:** Dedicated, unauthenticated pages for users to view and fill out forms. 
 - **Analytics & Submissions:** Dashboard to view all gathered responses and file uploads.
 - **Dark Mode UI:** Sleek, premium aesthetic with smooth micro-animations.
 - **Accounts:** Email/password signup and login. Each user only sees and manages their own forms — the dashboard, form builder, and submissions views all require an authenticated session. Published forms remain fully public and unauthenticated for respondents.
+- **AI Helper:** Inline "Improve wording" and "Suggest options" in the question editor, plus a "Generate with AI" flow that drafts a full form (splitting it into steps for larger ones) from a text prompt — the user reviews the plan before anything is created. See [AI Helper](#ai-helper) below.
 - **MCP Server:** The backend exposes an MCP endpoint at `/mcp`, authenticated with a per-account API token, so any MCP client (Claude Code, Claude Desktop) can create and manage that user's forms through natural language. See [MCP Server](#mcp-server) below.
 
 ## Project Structure
@@ -106,16 +112,35 @@ regenerate/revoke any time. It's independent of the session cookie: `requireAuth
 either an `Authorization: Bearer <token>` header or the session cookie, so the exact same
 route handlers serve both the dashboard and the MCP server.
 
+## AI Helper
+
+Requires `ANTHROPIC_API_KEY` set on the backend (see `backend/.env.example` — copy it to
+`backend/.env` for local dev, or set it in your host's environment variables in
+production). Without it, the AI endpoints return a clean `502` instead of crashing; the
+rest of the app works normally.
+
+Uses `claude-opus-5` with structured JSON output (`backend/src/ai.ts`,
+`backend/src/routes/ai.ts`):
+
+- `POST /api/ai/improve-question` / `POST /api/ai/suggest-options` — inline per-question
+  assistance surfaced as buttons in the question editor.
+- `POST /api/ai/plan-form` — given a text prompt, drafts a form's title, description, and
+  full question list, split across multiple steps if the form is large. This call makes
+  no database writes.
+- `POST /api/ai/create-form` — persists an already-drafted plan. No AI call here; it only
+  runs once the user has reviewed the plan in the UI and approved it, so a form is never
+  created without the user seeing it first.
+
 ## MCP Server
 
 The Fastify backend hosts an MCP (Model Context Protocol) server at `/mcp`, using the
-Streamable HTTP transport. It exposes 11 tools that mirror the REST API one-to-one —
+Streamable HTTP transport. It exposes 15 tools that mirror the REST API one-to-one —
 `list_forms`, `get_form`, `create_form`, `update_form`, `delete_form`, `add_question`,
-`update_question`, `delete_question`, `reorder_questions`, `list_submissions`, and
-`get_submission` — implemented in `backend/src/routes/mcp.ts` by calling the same route
-handlers in-process via `app.inject()`, forwarding the caller's API token on every call,
-so there's no separate copy of the business logic (slug generation, publish rules, auth
-scoping) to keep in sync.
+`update_question`, `delete_question`, `reorder_questions`, `add_step`, `update_step`,
+`delete_step`, `reorder_steps`, `list_submissions`, and `get_submission` — implemented in
+`backend/src/routes/mcp.ts` by calling the same route handlers in-process via
+`app.inject()`, forwarding the caller's API token on every call, so there's no separate
+copy of the business logic (slug generation, publish rules, auth scoping) to keep in sync.
 
 Every `/mcp` request requires `Authorization: Bearer <token>` using the API token from
 Settings — there's no anonymous access, and each token only sees that account's forms.
@@ -145,7 +170,8 @@ Or add to an MCP client config directly:
 
 End-to-end tests live in `/e2e` (Playwright), covering the auth flow (signup, login,
 logout, route guarding, account isolation, MCP token generation) and the public form
-page (view + submit with zero authentication, unknown-slug handling).
+page (view + submit with zero authentication, unknown-slug handling, multi-step
+navigation with progress/validation/back-preserves-answers).
 
 ```bash
 cd e2e
@@ -160,4 +186,4 @@ The config starts both the backend and frontend dev servers automatically
 ## Technical Notes
 
 - **File Uploads:** Uploaded files during form submissions are saved locally in `/backend/uploads`. They are served statically by the Fastify backend.
-- **Environment Variables:** Currently, API endpoints are hardcoded to `http://localhost:3001` in the `frontend/src/api/client.ts`. If deploying to production, this should be migrated to `.env` files.
+- **Environment Variables:** The frontend calls a relative `/api` path (proxied to the backend by Vite locally and by the host's rewrite rules in production), so it needs no env vars. The backend reads `ANTHROPIC_API_KEY` via `dotenv` (`backend/.env`, gitignored) — currently the only environment variable the app uses.
