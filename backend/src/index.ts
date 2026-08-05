@@ -5,6 +5,8 @@ import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import rateLimit from '@fastify/rate-limit';
+import swagger from '@fastify/swagger';
+import scalarApiReference from '@scalar/fastify-api-reference';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -54,6 +56,20 @@ await app.register(fastifyStatic, {
   root: path.join(__dirname, '..', 'uploads'),
   prefix: '/uploads/',
   decorateReply: false
+});
+
+await app.register(swagger, {
+  openapi: {
+    info: {
+      title: 'Formly API',
+      description: 'REST API for the Formly dynamic form builder.',
+      version: '1.0.0',
+    },
+  },
+});
+
+await app.register(scalarApiReference, {
+  routePrefix: '/docs',
 });
 
 // Register routes
