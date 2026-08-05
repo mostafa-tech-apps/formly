@@ -15,6 +15,14 @@ const DEFAULT_GROUP: VisibilityGroup = {
   conditions: []
 };
 
+// Per-operator color + copy, so a group's boolean relationship reads at a
+// glance instead of requiring the reader to parse a dropdown value.
+const OP_STYLE: Record<LogicGroupOperator, { text: string; bg: string; summary: string }> = {
+  AND: { text: 'var(--accent)', bg: 'var(--accent-light)', summary: 'all of the following are true' },
+  OR: { text: 'var(--amber)', bg: 'rgba(245,158,11,0.12)', summary: 'any of the following are true' },
+  NOT: { text: 'var(--red)', bg: 'rgba(239,68,68,0.12)', summary: 'none of the following are true' },
+};
+
 export default function LogicBuilder({ logic, onChange, previousQuestions }: LogicBuilderProps) {
   if (previousQuestions.length === 0) {
     return (
@@ -89,54 +97,89 @@ function LogicGroupNode({ group, onChange, previousQuestions, isRoot }: GroupNod
     onChange({ ...group, conditions: newConditions });
   };
 
+  const style = OP_STYLE[group.operator];
+
   return (
-    <div className="logic-group" style={{ 
-      borderLeft: isRoot ? 'none' : '2px solid var(--primary)', 
-      paddingLeft: isRoot ? 0 : '1rem',
+    <div className="logic-group" style={{
+      border: isRoot ? 'none' : `1px solid ${style.text}`,
+      borderLeft: `3px solid ${style.text}`,
+      borderRadius: isRoot ? 0 : 'var(--radius-sm)',
+      background: isRoot ? 'transparent' : style.bg,
+      padding: isRoot ? 0 : '0.75rem',
       marginLeft: isRoot ? 0 : '0.5rem',
       marginTop: '0.5rem'
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-        <select 
-          className="select select-sm" 
-          value={group.operator} 
-          onChange={e => onChange({ ...group, operator: e.target.value as LogicGroupOperator })}
-          style={{ width: '80px', fontWeight: 600 }}
-        >
-          <option value="AND">AND</option>
-          <option value="OR">OR</option>
-          <option value="NOT">NOT</option>
-        </select>
-        <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-          {group.operator === 'NOT' ? 'all of the following are false:' : 'the following are true:'}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.75rem' }}>
+        <div style={{ display: 'inline-flex', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden', flexShrink: 0 }}>
+          {(['AND', 'OR', 'NOT'] as LogicGroupOperator[]).map((op, i) => {
+            const active = group.operator === op;
+            const opStyle = OP_STYLE[op];
+            return (
+              <button
+                key={op}
+                type="button"
+                onClick={() => onChange({ ...group, operator: op })}
+                style={{
+                  padding: '0.3rem 0.65rem',
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  letterSpacing: '0.03em',
+                  border: 'none',
+                  borderLeft: i > 0 ? '1px solid var(--border)' : 'none',
+                  cursor: 'pointer',
+                  background: active ? opStyle.bg : 'transparent',
+                  color: active ? opStyle.text : 'var(--text-secondary)',
+                }}
+              >
+                {op}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
+          {style.summary}
         </div>
       </div>
 
-      <div className="logic-conditions" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+      <div className="logic-conditions" style={{ display: 'flex', flexDirection: 'column' }}>
         {group.conditions.map((cond, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {cond.type === 'group' ? (
-                <LogicGroupNode 
-                  group={cond} 
-                  onChange={newGroup => updateCondition(i, newGroup)} 
-                  previousQuestions={previousQuestions} 
-                />
-              ) : (
-                <LogicRuleNode 
-                  rule={cond} 
-                  onChange={newRule => updateCondition(i, newRule)} 
-                  previousQuestions={previousQuestions} 
-                />
-              )}
+          <div key={i}>
+            {i > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.4rem 0' }}>
+                <span style={{
+                  fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.04em',
+                  padding: '0.12rem 0.5rem', borderRadius: '999px', flexShrink: 0,
+                  background: style.bg, color: style.text,
+                }}>
+                  {group.operator}
+                </span>
+                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+              </div>
+            )}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {cond.type === 'group' ? (
+                  <LogicGroupNode
+                    group={cond}
+                    onChange={newGroup => updateCondition(i, newGroup)}
+                    previousQuestions={previousQuestions}
+                  />
+                ) : (
+                  <LogicRuleNode
+                    rule={cond}
+                    onChange={newRule => updateCondition(i, newRule)}
+                    previousQuestions={previousQuestions}
+                  />
+                )}
+              </div>
+              <button className="btn-icon" onClick={() => updateCondition(i, null)} style={{ width: 28, height: 28, color: 'var(--text-secondary)' }}>
+                <X size={14} />
+              </button>
             </div>
-            <button className="btn-icon" onClick={() => updateCondition(i, null)} style={{ width: 28, height: 28, color: 'var(--text-secondary)' }}>
-              <X size={14} />
-            </button>
           </div>
         ))}
 
-        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem' }}>
           <button className="btn btn-ghost btn-sm" onClick={addRule}>
             <Plus size={14} /> Add Rule
           </button>
