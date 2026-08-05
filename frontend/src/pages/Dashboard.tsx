@@ -115,9 +115,11 @@ export default function Dashboard() {
               title="Grid view"
             ><LayoutGrid size={16} /></button>
           </div>
-          <button className="btn btn-primary" onClick={createForm}>
-            <Plus size={18} /> New Form
-          </button>
+          {forms.length > 0 && (
+            <button className="btn btn-primary" onClick={createForm}>
+              <Plus size={18} /> New Form
+            </button>
+          )}
         </div>
       </div>
 
