@@ -96,6 +96,7 @@ export default function GenerateFormTray({ onClose, onCreated }: Props) {
   };
 
   const backToPrompt = () => {
+    abortRef.current?.abort();
     setStarted(false);
     setPlan(null);
     setAwaitingClarification(false);
@@ -374,6 +375,7 @@ export default function GenerateFormTray({ onClose, onCreated }: Props) {
 
           {started && awaitingClarification && (
             <>
+              <button className="btn btn-secondary" onClick={backToPrompt}><ArrowLeft size={14} /> Back</button>
               <button className="btn btn-secondary" onClick={close}>Cancel</button>
               <button className="btn btn-primary" onClick={submitClarification} disabled={!clarifyAnswer.trim()}>
                 Continue
@@ -382,9 +384,14 @@ export default function GenerateFormTray({ onClose, onCreated }: Props) {
           )}
 
           {started && !awaitingClarification && rowStatus.approval !== 'active' && rowStatus.ready !== 'done' && (
-            <button className="btn btn-secondary" onClick={close}>
-              {Object.values(rowStatus).includes('error') ? 'Close' : 'Cancel'}
-            </button>
+            <>
+              {rowStatus.building === 'pending' && (
+                <button className="btn btn-secondary" onClick={backToPrompt}><ArrowLeft size={14} /> Back</button>
+              )}
+              <button className="btn btn-secondary" onClick={close}>
+                {Object.values(rowStatus).includes('error') ? 'Close' : 'Cancel'}
+              </button>
+            </>
           )}
 
           {started && rowStatus.ready === 'done' && (
