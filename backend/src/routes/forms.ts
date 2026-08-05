@@ -2,24 +2,12 @@ import { FastifyInstance } from 'fastify';
 import db from '../db.js';
 import { nanoid } from 'nanoid';
 import { requireAuth } from '../auth.js';
+import { slugify, uniqueSlug } from '../slug.js';
 
 interface FormBody {
   title?: string;
   description?: string;
   status?: 'draft' | 'published';
-}
-
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 60) || 'form';
-}
-
-function uniqueSlug(base: string): string {
-  return `${base}-${nanoid(6)}`;
 }
 
 export default async function formRoutes(app: FastifyInstance) {

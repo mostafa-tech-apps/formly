@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+            e2e/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Install e2e dependencies
+        run: npm ci
+        working-directory: e2e
+
+      - name: Typecheck backend
+        run: npx tsc --noEmit
+        working-directory: backend
+
+      - name: Typecheck frontend
+        run: npx tsc --noEmit
+        working-directory: frontend
+
+      - name: Backend unit tests
+        run: npm test
+        working-directory: backend
+
+      - name: Frontend unit tests
+        run: npm test
+        working-directory: frontend
+
+      # ubuntu-latest runners ship Google Chrome stable pre-installed, which is
+      # what playwright.config.ts's `channel: 'chrome'` uses — no separate
+      # `playwright install` step needed.
+      - name: End-to-end tests
+        run: npm test
+        working-directory: e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7

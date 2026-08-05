@@ -168,7 +168,13 @@ Or add to an MCP client config directly:
 
 ## Testing
 
-End-to-end tests live in `/e2e` (Playwright), covering the auth flow (signup, login,
+**Unit tests** (Node's built-in test runner, via `tsx --test`) cover logic that's easy
+to regress silently: `backend/src/slug.test.ts` (slug generation), `backend/src/agentConversations.test.ts`
+(the AI conversation state machine, including the userId-scoping guard), and
+`frontend/src/logicEvaluator.test.ts` (conditional visibility logic — AND/OR/NOT,
+nesting, every rule operator). Run with `npm test` in `backend/` or `frontend/`.
+
+**End-to-end tests** live in `/e2e` (Playwright), covering the auth flow (signup, login,
 logout, route guarding, account isolation, MCP token generation) and the public form
 page (view + submit with zero authentication, unknown-slug handling, multi-step
 navigation with progress/validation/back-preserves-answers).
@@ -182,6 +188,9 @@ npm test
 
 The config starts both the backend and frontend dev servers automatically
 (`e2e/playwright.config.ts`) if they aren't already running.
+
+**CI** (`.github/workflows/ci.yml`) runs all of the above — typecheck, unit tests, and
+the full e2e suite — on every push and pull request.
 
 ## Technical Notes
 
