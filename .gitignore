@@ -1,0 +1,19 @@
+# Dependency directories
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# SQLite databases
+backend/data/
+
+# Uploaded files
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# IDE and OS files
+.DS_Store
+.idea/
+.vscode/
