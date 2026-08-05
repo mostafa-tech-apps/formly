@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify';
 import db from '../db.js';
 import { nanoid } from 'nanoid';
 import { requireAuth } from '../auth.js';
-import { askClaudeJSON } from '../ai.js';
+import { askLLMJSON } from '../ai.js';
 import { runAgentTurn, type FormPlan } from '../agent.js';
 import { createConversation, getConversation, deleteConversation, type ConversationState } from '../agentConversations.js';
 import { INJECTION_GUARDRAIL, wrapUntrusted } from '../promptSafety.js';
@@ -17,12 +17,10 @@ export default async function aiRoutes(app: FastifyInstance) {
     if (!label) return reply.status(400).send({ error: 'label is required' });
 
     try {
-      const result = await askClaudeJSON<{ label: string }>({
+      const result = await askLLMJSON<{ label: string }>({
         system: 'You improve form question wording. Rewrite the given question label to be clearer and more concise while preserving its original intent, tone, and level of formality. Return only the rewritten label, nothing else.\n\n' + INJECTION_GUARDRAIL,
         prompt: wrapUntrusted('Question label', label),
         schema: { type: 'object', properties: { label: { type: 'string' } }, required: ['label'], additionalProperties: false },
-        effort: 'low',
-        maxTokens: 512,
       });
       return { label: result.label };
     } catch (e: any) {
@@ -39,12 +37,10 @@ export default async function aiRoutes(app: FastifyInstance) {
     if (!label) return reply.status(400).send({ error: 'label is required' });
 
     try {
-      const result = await askClaudeJSON<{ options: string[] }>({
+      const result = await askLLMJSON<{ options: string[] }>({
         system: 'You suggest answer options for a multiple-choice form question. Given the question label, suggest 3 to 6 concise, mutually distinct options a respondent might choose. Cover the most likely real answers.\n\n' + INJECTION_GUARDRAIL,
         prompt: wrapUntrusted('Question label', label),
         schema: { type: 'object', properties: { options: { type: 'array', items: { type: 'string' } } }, required: ['options'], additionalProperties: false },
-        effort: 'low',
-        maxTokens: 512,
       });
       return { options: result.options };
     } catch (e: any) {

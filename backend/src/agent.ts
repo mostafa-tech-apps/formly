@@ -1,15 +1,33 @@
-import { ChatAnthropic } from '@langchain/anthropic';
+import { ChatOpenAI } from '@langchain/openai';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
+import { toJsonSchema } from '@langchain/core/utils/json_schema';
 import { z } from 'zod';
 import { INJECTION_GUARDRAIL, wrapUntrusted } from './promptSafety.js';
 
-let model: ChatAnthropic | null = null;
+const STRUCTURED_OUTPUT_ATTEMPTS = 3;
 
-function getModel(): ChatAnthropic {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error('AI features are not configured on this server (missing ANTHROPIC_API_KEY).');
+const OPENROUTER_MODEL = 'openai/gpt-oss-20b:free';
+
+let model: ChatOpenAI | null = null;
+
+function getModel(): ChatOpenAI {
+  if (!process.env.OPENROUTER_API_KEY) {
+    throw new Error('AI features are not configured on this server (missing OPENROUTER_API_KEY).');
   }
-  if (!model) model = new ChatAnthropic({ model: 'claude-opus-5', maxTokens: 8192 });
+  if (!model) {
+    model = new ChatOpenAI({
+      model: OPENROUTER_MODEL,
+      apiKey: process.env.OPENROUTER_API_KEY,
+      maxTokens: 8192,
+      configuration: {
+        baseURL: 'https://openrouter.ai/api/v1',
+        defaultHeaders: {
+          'HTTP-Referer': 'https://formly-4gbd.onrender.com',
+          'X-Title': 'Formly',
+        },
+      },
+    });
+  }
   return model;
 }
 
@@ -68,8 +86,23 @@ async function invoke<T extends Record<string, any>>(
   prompt: string,
   signal: AbortSignal,
 ): Promise<T> {
-  const structured = getModel().withStructuredOutput(schema, { name, method: 'jsonSchema' });
-  return structured.invoke([new SystemMessage(system), new HumanMessage(prompt)], { signal });
+  // jsonMode (the only structured-output mode this free model's provider handles
+  // reliably) doesn't enforce or communicate the schema itself, so it has to be
+  // spelled out in the prompt — and even then small models occasionally reply
+  // with something that isn't valid JSON, so a few retries goes a long way.
+  const schemaText = JSON.stringify(toJsonSchema(schema));
+  const fullPrompt = `${prompt}\n\nRespond with ONLY a JSON object (no markdown, no explanation) matching this schema:\n${schemaText}`;
+  const structured = getModel().withStructuredOutput(schema, { name, method: 'jsonMode' });
+
+  let lastError: unknown;
+  for (let attempt = 0; attempt < STRUCTURED_OUTPUT_ATTEMPTS; attempt++) {
+    try {
+      return await structured.invoke([new SystemMessage(system), new HumanMessage(fullPrompt)], { signal });
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError;
 }
 
 export async function analyzePurpose(

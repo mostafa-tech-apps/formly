@@ -114,22 +114,28 @@ route handlers serve both the dashboard and the MCP server.
 
 ## AI Helper
 
-Requires `ANTHROPIC_API_KEY` set on the backend (see `backend/.env.example` — copy it to
+Requires `OPENROUTER_API_KEY` set on the backend (see `backend/.env.example` — copy it to
 `backend/.env` for local dev, or set it in your host's environment variables in
-production). Without it, the AI endpoints return a clean `502` instead of crashing; the
-rest of the app works normally.
+production). Without it, the AI endpoints fail gracefully — a clean `502` for the simple
+endpoints, or an `error` SSE event for the streaming one — instead of crashing; the rest
+of the app works normally.
 
-Uses `claude-opus-5` with structured JSON output (`backend/src/ai.ts`,
-`backend/src/routes/ai.ts`):
+Runs on `openai/gpt-oss-20b:free` via [OpenRouter](https://openrouter.ai), through
+LangChain's `ChatOpenAI` pointed at OpenRouter's OpenAI-compatible endpoint
+(`backend/src/ai.ts`, `backend/src/agent.ts`), with structured JSON output for every
+call so responses always match a schema. Every user-controlled input (prompts,
+clarification answers, question labels) is wrapped in `<untrusted>` delimiters with an
+explicit anti-injection instruction — see `backend/src/promptSafety.ts`.
 
 - `POST /api/ai/improve-question` / `POST /api/ai/suggest-options` — inline per-question
   assistance surfaced as buttons in the question editor.
-- `POST /api/ai/plan-form` — given a text prompt, drafts a form's title, description, and
-  full question list, split across multiple steps if the form is large. This call makes
-  no database writes.
+- `POST /api/ai/plan-form` — an SSE-streamed agentic pipeline (understand → think → plan)
+  that drafts a form from a text prompt, pausing to ask clarifying questions if the
+  request is ambiguous. Makes no database writes.
 - `POST /api/ai/create-form` — persists an already-drafted plan. No AI call here; it only
-  runs once the user has reviewed the plan in the UI and approved it, so a form is never
-  created without the user seeing it first.
+  runs once the user has reviewed and approved the plan in the "Generate with AI" tray,
+  so a form is never created without the user seeing it first. The tray then verifies and
+  publishes it automatically, landing on a "Ready" state with a link to the live form.
 
 ## MCP Server
 
@@ -195,4 +201,4 @@ the full e2e suite — on every push and pull request.
 ## Technical Notes
 
 - **File Uploads:** Uploaded files during form submissions are saved locally in `/backend/uploads`. They are served statically by the Fastify backend.
-- **Environment Variables:** The frontend calls a relative `/api` path (proxied to the backend by Vite locally and by the host's rewrite rules in production), so it needs no env vars. The backend reads `ANTHROPIC_API_KEY` via `dotenv` (`backend/.env`, gitignored) — currently the only environment variable the app uses.
+- **Environment Variables:** The frontend calls a relative `/api` path (proxied to the backend by Vite locally and by the host's rewrite rules in production), so it needs no env vars. The backend reads `OPENROUTER_API_KEY` via `dotenv` (`backend/.env`, gitignored) — currently the only environment variable the app uses.
