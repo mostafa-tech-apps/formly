@@ -1,9 +1,10 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { Upload, CheckCircle } from 'lucide-react';
 import { api } from '../api/client';
 import type { Question } from '../types';
-import { parseOptions, isRequired } from '../types';
+import { parseOptions, isRequired, parseVisibilityRules } from '../types';
+import { evaluateLogic } from '../logicEvaluator';
 
 export default function PublicForm() {
   const { slug } = useParams<{ slug: string }>();
@@ -24,10 +25,18 @@ export default function PublicForm() {
       .catch(() => { setNotFound(true); setLoading(false); });
   });
 
+  const visibleQuestions = useMemo(() => {
+    return questions.filter(q => {
+      const logic = parseVisibilityRules(q.visibility_rules);
+      return evaluateLogic(logic, answers, files);
+    });
+  }, [questions, answers, files]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    for (const q of questions) {
+    
+    for (const q of visibleQuestions) {
       if (isRequired(q.required)) {
         if (q.type === 'file_upload' && !files[q.id]) { setError(`"${q.label}" is required`); return; }
         if (q.type !== 'file_upload' && (!answers[q.id] || !answers[q.id].trim())) { setError(`"${q.label}" is required`); return; }
@@ -36,7 +45,7 @@ export default function PublicForm() {
     setSubmitting(true);
     try {
       const fd = new FormData();
-      for (const q of questions) {
+      for (const q of visibleQuestions) {
         if (q.type === 'file_upload') { if (files[q.id]) fd.append(q.id, files[q.id]); }
         else fd.append(q.id, answers[q.id] ?? '');
       }
@@ -58,7 +67,7 @@ export default function PublicForm() {
         </div>
         {error && <div className="error-banner">{error}</div>}
         <form onSubmit={handleSubmit}>
-          {questions.map(q => (
+          {visibleQuestions.map(q => (
             <div key={q.id} className="public-question">
               <div className="public-question-label">
                 <span>{q.label}</span>

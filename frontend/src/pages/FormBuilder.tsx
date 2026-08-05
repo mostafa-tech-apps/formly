@@ -227,13 +227,18 @@ export default function FormBuilder() {
 
       {/* New question modal */}
       {showNewQuestion && (
-        <QuestionEditor onSave={addQuestion} onClose={() => setShowNewQuestion(false)} />
+        <QuestionEditor 
+          onSave={addQuestion} 
+          onClose={() => setShowNewQuestion(false)} 
+          previousQuestions={questions}
+        />
       )}
 
       {/* Edit question modal */}
       {editingQuestion && (
         <QuestionEditor
           question={editingQuestion}
+          previousQuestions={questions.slice(0, questions.findIndex(q => q.id === editingQuestion.id))}
           onSave={(data) => updateQuestion(editingQuestion.id, data)}
           onClose={() => setEditingQuestion(null)}
         />
