@@ -87,3 +87,9 @@ export function parseOptions(options: string): string[] {
 export function isRequired(required: number | boolean): boolean {
   return required === 1 || required === true;
 }
+
+export function formatDate(iso: string): string {
+  return new Date(iso)
+    .toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true })
+    .replace(/\b(am|pm)\b/i, m => m.toUpperCase());
+}

@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Eye, Inbox } from 'lucide-react';
 import { api } from '../api/client';
+import { formatDate } from '../types';
 import type { Submission } from '../types';
+import FormTabs from '../components/FormTabs';
 
 export default function Submissions() {
   const { id } = useParams<{ id: string }>();
@@ -22,11 +24,12 @@ export default function Submissions() {
 
   return (
     <div className="page-container">
-      <Link to={`/forms/${id}/edit`} className="back-link"><ArrowLeft size={16} /> Back to Form</Link>
+      <Link to="/" className="back-link"><ArrowLeft size={16} /> Back to Dashboard</Link>
+      <FormTabs id={id!} />
       <div className="page-header">
         <div>
-          <h1 className="page-title">Submissions</h1>
-          <p className="page-subtitle">{formTitle} — {submissions.length} response{submissions.length !== 1 ? 's' : ''}</p>
+          <h1 className="page-title">{formTitle}</h1>
+          <p className="page-subtitle">{submissions.length} response{submissions.length !== 1 ? 's' : ''}</p>
         </div>
       </div>
       {submissions.length === 0 ? (
@@ -45,7 +48,7 @@ export default function Submissions() {
               {submissions.map((sub, i) => (
                 <tr key={sub.id} onClick={() => navigate(`/forms/${id}/submissions/${sub.id}`)}>
                   <td style={{ fontWeight: 600, color: 'var(--accent)' }}>{submissions.length - i}</td>
-                  <td>{new Date(sub.submitted_at).toLocaleString()}</td>
+                  <td>{formatDate(sub.submitted_at)}</td>
                   <td>
                     <div className="sub-preview">
                       {sub.preview?.map((p, pi) => (

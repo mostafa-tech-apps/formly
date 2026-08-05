@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, ChevronUp, ChevronDown, ClipboardCopy, ExternalLink, Save } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, ClipboardCopy, ExternalLink, Pencil, GripVertical } from 'lucide-react';
 import { api } from '../api/client';
 import type { Form, Question } from '../types';
 import { parseOptions, isRequired } from '../types';
 import QuestionEditor from '../components/QuestionEditor';
+import FormTabs from '../components/FormTabs';
 
 export default function FormBuilder() {
   const { id } = useParams<{ id: string }>();
@@ -15,6 +16,7 @@ export default function FormBuilder() {
   const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [showNewQuestion, setShowNewQuestion] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: string } | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
 
   const showToast = (msg: string, type = 'success') => {
     setToast({ msg, type });
@@ -90,14 +92,21 @@ export default function FormBuilder() {
     }
   };
 
-  const moveQuestion = async (index: number, direction: 'up' | 'down') => {
-    const newIndex = direction === 'up' ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= questions.length) return;
-    const reordered = [...questions];
-    [reordered[index], reordered[newIndex]] = [reordered[newIndex], reordered[index]];
-    setQuestions(reordered);
+  const shiftQuestion = (overIndex: number) => {
+    if (dragIndex === null || dragIndex === overIndex) return;
+    setQuestions(prev => {
+      const reordered = [...prev];
+      const [moved] = reordered.splice(dragIndex, 1);
+      reordered.splice(overIndex, 0, moved);
+      return reordered;
+    });
+    setDragIndex(overIndex);
+  };
+
+  const persistOrder = async () => {
+    setDragIndex(null);
     try {
-      await api.reorderQuestions(id!, reordered.map(q => q.id));
+      await api.reorderQuestions(id!, questions.map(q => q.id));
     } catch (e: any) {
       showToast(e.message, 'error');
       load();
@@ -119,6 +128,7 @@ export default function FormBuilder() {
   return (
     <div className="page-container">
       <Link to="/" className="back-link"><ArrowLeft size={16} /> Back to Dashboard</Link>
+      <FormTabs id={id!} />
 
       {/* Form header */}
       <div style={{ marginBottom: '2rem' }}>
@@ -182,31 +192,35 @@ export default function FormBuilder() {
       ) : (
         <div className="question-list">
           {questions.map((q, i) => (
-            <div key={q.id} className="question-card">
+            <div
+              key={q.id}
+              className={`question-card ${dragIndex === i ? 'is-dragging' : ''}`}
+              draggable
+              onDragStart={() => setDragIndex(i)}
+              onDragEnd={persistOrder}
+              onDragOver={(e) => { e.preventDefault(); shiftQuestion(i); }}
+              onDrop={(e) => e.preventDefault()}
+            >
               <div className="question-card-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
-                  <span className="question-number">{i + 1}</span>
+                  <span className="drag-handle" title="Drag to reorder" style={{ display: 'inline-flex', color: 'var(--text-muted)' }}>
+                    <GripVertical size={16} />
+                  </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.25rem' }}>
                       {q.label || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Untitled question</span>}
+                      {isRequired(q.required) && <span className="required-star"> *</span>}
                     </div>
                     <div className="question-card-badges">
                       <span className="badge badge-type">{typeLabel(q.type)}</span>
-                      {isRequired(q.required) && <span className="badge badge-required">Required</span>}
                     </div>
                   </div>
                 </div>
                 <div className="question-card-actions">
-                  <button className="btn-icon" onClick={() => moveQuestion(i, 'up')} disabled={i === 0} title="Move up" style={{ width: 30, height: 30 }}>
-                    <ChevronUp size={14} />
+                  <button className="btn-icon-ghost" onClick={() => setEditingQuestion(q)} title="Edit">
+                    <Pencil size={14} />
                   </button>
-                  <button className="btn-icon" onClick={() => moveQuestion(i, 'down')} disabled={i === questions.length - 1} title="Move down" style={{ width: 30, height: 30 }}>
-                    <ChevronDown size={14} />
-                  </button>
-                  <button className="btn-icon" onClick={() => setEditingQuestion(q)} title="Edit" style={{ width: 30, height: 30 }}>
-                    <Save size={14} />
-                  </button>
-                  <button className="btn-icon" onClick={() => deleteQuestion(q.id)} title="Delete" style={{ width: 30, height: 30, color: 'var(--red)' }}>
+                  <button className="btn-icon-ghost" onClick={() => deleteQuestion(q.id)} title="Delete" style={{ color: 'var(--red)' }}>
                     <Trash2 size={14} />
                   </button>
                 </div>

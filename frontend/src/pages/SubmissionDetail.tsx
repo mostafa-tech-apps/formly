@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Download } from 'lucide-react';
 import { api } from '../api/client';
+import { formatDate } from '../types';
 import type { Answer } from '../types';
 
 export default function SubmissionDetail() {
@@ -26,7 +27,7 @@ export default function SubmissionDetail() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Submission Details</h1>
-          <p className="page-subtitle">Submitted {new Date(submission.submitted_at).toLocaleString()}</p>
+          <p className="page-subtitle">Submitted {formatDate(submission.submitted_at)}</p>
         </div>
       </div>
       <div className="answer-list">
