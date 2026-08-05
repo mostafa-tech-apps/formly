@@ -233,7 +233,10 @@ a:hover { text-decoration: underline; }
   background-position: right 0.75rem center;
   padding-right: 2rem;
 }
-
+.select option {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
 .form-group { margin-bottom: 1rem; }
 .form-label {
   display: block;
