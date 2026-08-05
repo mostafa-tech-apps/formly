@@ -1,7 +1,7 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 
-const OPENROUTER_MODEL = 'openai/gpt-oss-20b:free';
+const OPENROUTER_MODEL = 'cohere/north-mini-code:free';
 
 let model: ChatOpenAI | null = null;
 
