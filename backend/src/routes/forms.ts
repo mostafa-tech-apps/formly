@@ -8,6 +8,19 @@ interface FormBody {
   status?: 'draft' | 'published';
 }
 
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60) || 'form';
+}
+
+function uniqueSlug(base: string): string {
+  return `${base}-${nanoid(6)}`;
+}
+
 export default async function formRoutes(app: FastifyInstance) {
   // List all forms
   app.get('/api/forms', async () => {
@@ -56,9 +69,9 @@ export default async function formRoutes(app: FastifyInstance) {
       if (qCount.count === 0) {
         return reply.status(400).send({ error: 'A form must have at least one question to be published.' });
       }
-      // Generate slug when publishing for the first time
+      // Generate slug from the form's title when publishing for the first time
       if (!form.slug) {
-        slug = nanoid(10);
+        slug = uniqueSlug(slugify(title ?? form.title));
       }
     }
 
