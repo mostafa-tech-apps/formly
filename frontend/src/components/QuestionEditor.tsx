@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { X, Plus, Trash2 } from 'lucide-react';
+import { X, Plus, Trash2, Sparkles } from 'lucide-react';
 import type { Question, VisibilityLogic } from '../types';
 import { parseOptions, isRequired, parseVisibilityRules } from '../types';
+import { api } from '../api/client';
 import LogicBuilder from './LogicBuilder';
 
 interface Props {
@@ -18,8 +19,39 @@ export default function QuestionEditor({ question, previousQuestions, onSave, on
   const [options, setOptions] = useState<string[]>(question ? parseOptions(question.options) : ['Option 1']);
   const [visibilityRules, setVisibilityRules] = useState<VisibilityLogic>(question ? parseVisibilityRules(question.visibility_rules) : null);
   const [saving, setSaving] = useState(false);
-  
+  const [improving, setImproving] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const [aiError, setAiError] = useState('');
+
   const [activeTab, setActiveTab] = useState<'basic' | 'logic'>('basic');
+
+  const improveWording = async () => {
+    if (!label.trim()) return;
+    setAiError('');
+    setImproving(true);
+    try {
+      const { label: improved } = await api.improveQuestion(label.trim());
+      setLabel(improved);
+    } catch (e: any) {
+      setAiError(e.message);
+    } finally {
+      setImproving(false);
+    }
+  };
+
+  const suggestOptions = async () => {
+    if (!label.trim()) return;
+    setAiError('');
+    setSuggesting(true);
+    try {
+      const { options: suggested } = await api.suggestOptions(label.trim());
+      if (suggested.length > 0) setOptions(suggested);
+    } catch (e: any) {
+      setAiError(e.message);
+    } finally {
+      setSuggesting(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!label.trim()) return;
@@ -74,7 +106,17 @@ export default function QuestionEditor({ question, previousQuestions, onSave, on
           {activeTab === 'basic' ? (
             <>
               <div className="form-group">
-                <label className="form-label">Question Label</label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label className="form-label">Question Label</label>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={improveWording}
+                    disabled={!label.trim() || improving}
+                    title="Rewrite this question for clarity using AI"
+                  >
+                    <Sparkles size={13} /> {improving ? 'Improving...' : 'Improve wording'}
+                  </button>
+                </div>
                 <input className="input" value={label} onChange={e => setLabel(e.target.value)} placeholder="Enter your question..." autoFocus />
               </div>
               <div className="form-group">
@@ -87,7 +129,17 @@ export default function QuestionEditor({ question, previousQuestions, onSave, on
               </div>
               {type === 'multiple_choice' && (
                 <div className="form-group">
-                  <label className="form-label">Options</label>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <label className="form-label">Options</label>
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={suggestOptions}
+                      disabled={!label.trim() || suggesting}
+                      title="Suggest options for this question using AI"
+                    >
+                      <Sparkles size={13} /> {suggesting ? 'Suggesting...' : 'Suggest options'}
+                    </button>
+                  </div>
                   <div className="option-list">
                     {options.map((opt, i) => (
                       <div key={i} className="option-item">
@@ -122,6 +174,7 @@ export default function QuestionEditor({ question, previousQuestions, onSave, on
           )}
         </div>
         <div className="modal-footer">
+          {aiError && <span style={{ color: 'var(--red)', fontSize: '0.8rem', marginRight: 'auto' }}>{aiError}</span>}
           <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" onClick={handleSave} disabled={saving || !label.trim()}>
             {saving ? 'Saving...' : (question ? 'Update' : 'Add Question')}

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, FileText, Trash2, ExternalLink, Link2, BarChart3, LayoutGrid, LayoutList, AlertTriangle } from 'lucide-react';
+import { Plus, FileText, Trash2, ExternalLink, Link2, BarChart3, LayoutGrid, LayoutList, AlertTriangle, Sparkles } from 'lucide-react';
 import { api } from '../api/client';
 import type { Form } from '../types';
+import GenerateFormModal from '../components/GenerateFormModal';
 
 function ConfirmModal({ title, message, onConfirm, onCancel }: {
   title: string;
@@ -40,6 +41,7 @@ export default function Dashboard() {
     () => (localStorage.getItem('dashboard-view') as 'list' | 'grid') ?? 'list'
   );
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [showGenerate, setShowGenerate] = useState(false);
   const navigate = useNavigate();
 
   const load = async () => {
@@ -67,6 +69,11 @@ export default function Dashboard() {
     } catch (e: any) {
       showToast(e.message, 'error');
     }
+  };
+
+  const onFormGenerated = (form: any) => {
+    setShowGenerate(false);
+    navigate(`/forms/${form.id}/edit`);
   };
 
   const handleDeleteClick = (e: React.MouseEvent, id: string) => {
@@ -116,9 +123,14 @@ export default function Dashboard() {
             ><LayoutGrid size={16} /></button>
           </div>
           {forms.length > 0 && (
-            <button className="btn btn-primary" onClick={createForm}>
-              <Plus size={18} /> New Form
-            </button>
+            <>
+              <button className="btn btn-secondary" onClick={() => setShowGenerate(true)}>
+                <Sparkles size={16} /> Generate with AI
+              </button>
+              <button className="btn btn-primary" onClick={createForm}>
+                <Plus size={18} /> New Form
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -128,9 +140,14 @@ export default function Dashboard() {
           <div className="empty-state-icon"><FileText size={28} /></div>
           <h3>No forms yet</h3>
           <p>Create your first form to get started collecting responses.</p>
-          <button className="btn btn-primary" onClick={createForm}>
-            <Plus size={18} /> Create Form
-          </button>
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+            <button className="btn btn-primary" onClick={createForm}>
+              <Plus size={18} /> Create Form
+            </button>
+            <button className="btn btn-secondary" onClick={() => setShowGenerate(true)}>
+              <Sparkles size={16} /> Generate with AI
+            </button>
+          </div>
         </div>
       ) : (
         <div className={viewMode === 'grid' ? 'form-grid-2col' : 'form-grid'}>
@@ -196,6 +213,10 @@ export default function Dashboard() {
           onConfirm={confirmDeleteForm}
           onCancel={() => setConfirmDelete(null)}
         />
+      )}
+
+      {showGenerate && (
+        <GenerateFormModal onClose={() => setShowGenerate(false)} onCreated={onFormGenerated} />
       )}
 
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}
