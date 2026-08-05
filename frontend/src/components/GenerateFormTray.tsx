@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
-import { X, Sparkles, ArrowLeft, Loader2, Check, ExternalLink } from 'lucide-react';
+import { X, Sparkles, ArrowLeft, Loader2, Check, ExternalLink, Plus, Trash2 } from 'lucide-react';
 import { api, streamPlanForm } from '../api/client';
-import type { FormPlan } from '../api/client';
+import type { FormPlan, PlannedQuestion } from '../api/client';
 
 interface Props {
   onClose: () => void;
@@ -21,8 +21,6 @@ const TIMELINE: { phase: TimelinePhase; label: string }[] = [
   { phase: 'publishing', label: 'Publishing' },
   { phase: 'ready', label: 'Ready' },
 ];
-
-const typeLabel = (t: string) => t === 'text' ? 'Text Input' : t === 'multiple_choice' ? 'Multiple Choice' : 'File Upload';
 
 export default function GenerateFormTray({ onClose, onCreated }: Props) {
   const [started, setStarted] = useState(false);
@@ -106,12 +104,65 @@ export default function GenerateFormTray({ onClose, onCreated }: Props) {
     setRowErrorState({});
   };
 
+  const updateStepTitle = (stepIndex: number, title: string) => {
+    setPlan(prev => {
+      if (!prev) return prev;
+      const steps = prev.steps.map((s, si) => si !== stepIndex ? s : { ...s, title });
+      return { ...prev, steps };
+    });
+  };
+
+  const updateQuestion = (stepIndex: number, qIndex: number, patch: Partial<PlannedQuestion>) => {
+    setPlan(prev => {
+      if (!prev) return prev;
+      const steps = prev.steps.map((s, si) => si !== stepIndex ? s : {
+        ...s,
+        questions: s.questions.map((q, qi) => qi !== qIndex ? q : { ...q, ...patch }),
+      });
+      return { ...prev, steps };
+    });
+  };
+
+  const updateOption = (stepIndex: number, qIndex: number, optIndex: number, value: string) => {
+    setPlan(prev => {
+      if (!prev) return prev;
+      const steps = prev.steps.map((s, si) => si !== stepIndex ? s : {
+        ...s,
+        questions: s.questions.map((q, qi) => qi !== qIndex ? q : { ...q, options: q.options.map((o, oi) => oi !== optIndex ? o : value) }),
+      });
+      return { ...prev, steps };
+    });
+  };
+
+  const addOption = (stepIndex: number, qIndex: number) => {
+    setPlan(prev => {
+      if (!prev) return prev;
+      const steps = prev.steps.map((s, si) => si !== stepIndex ? s : {
+        ...s,
+        questions: s.questions.map((q, qi) => qi !== qIndex ? q : { ...q, options: [...q.options, `Option ${q.options.length + 1}`] }),
+      });
+      return { ...prev, steps };
+    });
+  };
+
+  const removeOption = (stepIndex: number, qIndex: number, optIndex: number) => {
+    setPlan(prev => {
+      if (!prev) return prev;
+      const steps = prev.steps.map((s, si) => si !== stepIndex ? s : {
+        ...s,
+        questions: s.questions.map((q, qi) => qi !== qIndex ? q : { ...q, options: q.options.filter((_, oi) => oi !== optIndex) }),
+      });
+      return { ...prev, steps };
+    });
+  };
+
   const approvePlan = async () => {
     if (!plan) return;
     setRow('approval', 'done');
     try {
       setRow('building', 'active');
       const { form } = await api.createFormFromPlan(plan);
+      setRow('building', 'done');
 
       setRow('verify', 'active');
       const { questions, steps } = await api.getForm(form.id);
@@ -215,21 +266,62 @@ export default function GenerateFormTray({ onClose, onCreated }: Props) {
                           {plan.steps.map((step, si) => (
                             <div key={si} style={{ marginBottom: '1rem' }}>
                               {plan.steps.length > 1 && (
-                                <div style={{ fontWeight: 600, fontSize: '0.88rem', marginBottom: '0.5rem' }}>{step.title || `Step ${si + 1}`}</div>
+                                <input
+                                  className="input"
+                                  value={step.title}
+                                  onChange={e => updateStepTitle(si, e.target.value)}
+                                  style={{ fontWeight: 600, fontSize: '0.86rem', marginBottom: '0.5rem', padding: '0.4rem 0.6rem' }}
+                                />
                               )}
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                 {step.questions.map((q, qi) => (
-                                  <div key={qi} className="card" style={{ padding: '0.6rem 0.85rem' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-                                      <span style={{ fontSize: '0.86rem' }}>
-                                        {q.label}
-                                        {q.required && <span className="required-star"> *</span>}
-                                      </span>
-                                      <span className="badge badge-type" style={{ flexShrink: 0 }}>{typeLabel(q.type)}</span>
+                                  <div key={qi} className="card" style={{ padding: '0.65rem 0.85rem' }}>
+                                    <input
+                                      className="input"
+                                      value={q.label}
+                                      onChange={e => updateQuestion(si, qi, { label: e.target.value })}
+                                      style={{ fontSize: '0.85rem', marginBottom: '0.5rem' }}
+                                    />
+                                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                      <select
+                                        className="select"
+                                        value={q.type}
+                                        onChange={e => updateQuestion(si, qi, { type: e.target.value as PlannedQuestion['type'] })}
+                                        style={{ flex: 1, fontSize: '0.8rem', padding: '0.4rem 0.5rem' }}
+                                      >
+                                        <option value="text">Text Input</option>
+                                        <option value="multiple_choice">Multiple Choice</option>
+                                        <option value="file_upload">File Upload</option>
+                                      </select>
+                                      <div className="toggle-wrap" style={{ flexShrink: 0 }}>
+                                        <div className={`toggle ${q.required ? 'active' : ''}`} onClick={() => updateQuestion(si, qi, { required: !q.required })} />
+                                        <span className="toggle-label" style={{ fontSize: '0.78rem' }}>Required</span>
+                                      </div>
                                     </div>
-                                    {q.type === 'multiple_choice' && q.options.length > 0 && (
-                                      <div style={{ marginTop: '0.35rem', color: 'var(--text-secondary)', fontSize: '0.78rem' }}>
-                                        {q.options.join(' · ')}
+                                    {q.type === 'multiple_choice' && (
+                                      <div style={{ marginTop: '0.5rem' }}>
+                                        <div className="option-list">
+                                          {q.options.map((opt, oi) => (
+                                            <div key={oi} className="option-item">
+                                              <div className="option-bullet" />
+                                              <input
+                                                className="input"
+                                                value={opt}
+                                                onChange={e => updateOption(si, qi, oi, e.target.value)}
+                                                placeholder={`Option ${oi + 1}`}
+                                                style={{ fontSize: '0.82rem' }}
+                                              />
+                                              {q.options.length > 1 && (
+                                                <button className="btn-icon" onClick={() => removeOption(si, qi, oi)} style={{ width: 28, height: 28, flexShrink: 0 }}>
+                                                  <Trash2 size={12} />
+                                                </button>
+                                              )}
+                                            </div>
+                                          ))}
+                                        </div>
+                                        <button className="btn btn-ghost btn-sm" onClick={() => addOption(si, qi)} style={{ marginTop: '0.4rem' }}>
+                                          <Plus size={12} /> Add Option
+                                        </button>
                                       </div>
                                     )}
                                   </div>
