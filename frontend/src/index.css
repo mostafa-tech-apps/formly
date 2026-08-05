@@ -284,6 +284,40 @@ a:hover { text-decoration: underline; }
   background-color: var(--bg-secondary);
   color: var(--text-primary);
 }
+.select.select-sm, .input.input-sm {
+  padding: 0.45rem 0.65rem;
+  font-size: 0.82rem;
+  border-radius: 6px;
+}
+.select.select-sm { padding-right: 1.75rem; }
+
+/* Visibility-logic rule row: sits inside a colored group card, so it's
+   lifted a step brighter than that card and picks up a thicker accent
+   edge matching the group's operator color. */
+.logic-rule {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  background: var(--bg-card-hover);
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-left-style: solid;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  transition: var(--transition);
+}
+.logic-rule:hover {
+  background: rgba(255,255,255,0.09);
+  border-color: rgba(255,255,255,0.18);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+}
+/* The rule's own operator dropdown picks up the group's accent color, so
+   it visually reads as "the operator" rather than a third generic field. */
+.logic-rule-op {
+  font-weight: 700;
+}
 .form-group { margin-bottom: 1rem; }
 .form-label {
   display: block;

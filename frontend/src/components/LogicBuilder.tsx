@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronRight, X } from 'lucide-react';
+import { useMemo } from 'react';
+import { Plus, Trash2, X } from 'lucide-react';
 import type { Question, VisibilityLogic, VisibilityGroup, VisibilityRule, RuleOperator, LogicGroupOperator } from '../types';
 import { parseOptions } from '../types';
 
@@ -169,6 +169,8 @@ function LogicGroupNode({ group, onChange, previousQuestions, isRoot }: GroupNod
                     rule={cond}
                     onChange={newRule => updateCondition(i, newRule)}
                     previousQuestions={previousQuestions}
+                    accentColor={style.text}
+                    accentBg={style.bg}
                   />
                 )}
               </div>
@@ -196,9 +198,11 @@ interface RuleNodeProps {
   rule: VisibilityRule;
   onChange: (rule: VisibilityRule) => void;
   previousQuestions: Question[];
+  accentColor: string;
+  accentBg: string;
 }
 
-function LogicRuleNode({ rule, onChange, previousQuestions }: RuleNodeProps) {
+function LogicRuleNode({ rule, onChange, previousQuestions, accentColor, accentBg }: RuleNodeProps) {
   const targetQ = previousQuestions.find(q => q.id === rule.questionId);
   
   // Filter options based on target question type
@@ -229,8 +233,8 @@ function LogicRuleNode({ rule, onChange, previousQuestions }: RuleNodeProps) {
   const needsValue = !['is_empty', 'is_not_empty'].includes(rule.operator);
 
   return (
-    <div className="logic-rule" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', background: 'var(--bg-primary)', padding: '0.5rem', borderRadius: '4px', border: '1px solid var(--border)' }}>
-      <select 
+    <div className="logic-rule" style={{ borderLeftColor: accentColor }}>
+      <select
         className="select select-sm" 
         value={rule.questionId} 
         onChange={e => handleQuestionChange(e.target.value)}
@@ -241,11 +245,11 @@ function LogicRuleNode({ rule, onChange, previousQuestions }: RuleNodeProps) {
         ))}
       </select>
 
-      <select 
-        className="select select-sm" 
-        value={rule.operator} 
+      <select
+        className="select select-sm logic-rule-op"
+        value={rule.operator}
         onChange={e => onChange({ ...rule, operator: e.target.value as RuleOperator })}
-        style={{ width: '130px' }}
+        style={{ width: '150px', color: accentColor, borderColor: accentColor, background: accentBg }}
       >
         {ops.includes('equals') && <option value="equals">is equal to</option>}
         {ops.includes('not_equals') && <option value="not_equals">is not equal to</option>}
