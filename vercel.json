@@ -15,6 +15,10 @@
             "destination": "https://formly-4gbd.onrender.com/mcp"
         },
         {
+            "source": "/uploads/(.*)",
+            "destination": "https://formly-4gbd.onrender.com/uploads/$1"
+        },
+        {
             "source": "/(.*)",
             "destination": {
                 "type": "service",
