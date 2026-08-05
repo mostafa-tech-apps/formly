@@ -2,7 +2,7 @@
 
 A modern, full-stack application that allows users to create dynamic forms, add various question types, apply complex conditional logic, and publish them to collect public submissions. 
 
-Built with **React**, **Vite**, **TypeScript** on the frontend, and **Fastify** with **SQLite** on the backend.
+Built with **React**, **Vite**, **TypeScript** on the frontend, and **Fastify** with **Postgres** (via [Neon](https://neon.tech)) on the backend.
 
 ## Table of Contents
 
@@ -38,7 +38,7 @@ Built with **React**, **Vite**, **TypeScript** on the frontend, and **Fastify** 
 This is a monorepo containing both the frontend and backend applications:
 
 - `/frontend` - React application built with Vite and TypeScript.
-- `/backend` - Fastify REST API with a local SQLite database.
+- `/backend` - Fastify REST API backed by a Postgres database (Neon).
 
 ---
 
@@ -54,7 +54,7 @@ Make sure you have the following installed on your local machine:
 
 ### 1. Backend Setup
 
-The backend relies on SQLite and stores its database locally.
+The backend connects to a Postgres database via the `DATABASE_URL` environment variable (see `backend/.env.example`) — schema tables are created automatically on startup if they don't exist yet.
 
 1. Navigate to the backend directory:
    ```bash
@@ -64,11 +64,12 @@ The backend relies on SQLite and stores its database locally.
    ```bash
    npm install
    ```
-3. Start the backend development server:
+3. Copy `.env.example` to `.env` and set `DATABASE_URL` to a Postgres connection string (e.g. a [Neon](https://neon.tech) project).
+4. Start the backend development server:
    ```bash
    npm run dev
    ```
-   *The API will start at `http://localhost:3001`. The SQLite database will be automatically created in `/backend/data/formbuilder.db`.*
+   *The API will start at `http://localhost:3001`.*
 
 ### 2. Frontend Setup
 
@@ -201,4 +202,4 @@ the full e2e suite — on every push and pull request.
 ## Technical Notes
 
 - **File Uploads:** Uploaded files during form submissions are saved locally in `/backend/uploads`. They are served statically by the Fastify backend.
-- **Environment Variables:** The frontend calls a relative `/api` path (proxied to the backend by Vite locally and by the host's rewrite rules in production), so it needs no env vars. The backend reads `OPENROUTER_API_KEY` via `dotenv` (`backend/.env`, gitignored) — currently the only environment variable the app uses.
+- **Environment Variables:** The frontend calls a relative `/api` path (proxied to the backend by Vite locally and by the host's rewrite rules in production), so it needs no env vars. The backend reads `OPENROUTER_API_KEY` and `DATABASE_URL` via `dotenv` (`backend/.env`, gitignored).

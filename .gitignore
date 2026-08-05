@@ -6,9 +6,6 @@ dist/
 build/
 *.tsbuildinfo
 
-# SQLite databases
-backend/data/
-
 # Environment variables
 .env
 backend/.env

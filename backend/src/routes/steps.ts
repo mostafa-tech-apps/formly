@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import db from '../db.js';
+import * as db from '../db.js';
 import { nanoid } from 'nanoid';
 import { requireAuth } from '../auth.js';
 
@@ -12,7 +12,7 @@ interface ReorderBody {
 }
 
 function ownedForm(formId: string, userId: string | undefined) {
-  return db.prepare(`SELECT id FROM forms WHERE id = ? AND user_id = ?`).get(formId, userId);
+  return db.get(`SELECT id FROM forms WHERE id = ? AND user_id = ?`, [formId, userId]);
 }
 
 export default async function stepRoutes(app: FastifyInstance) {
@@ -21,20 +21,20 @@ export default async function stepRoutes(app: FastifyInstance) {
     '/api/forms/:formId/steps',
     { preHandler: requireAuth },
     async (req, reply) => {
-      if (!ownedForm(req.params.formId, req.userId)) {
+      if (!(await ownedForm(req.params.formId, req.userId))) {
         return reply.status(404).send({ error: 'Form not found' });
       }
 
       const id = nanoid();
       const { title = '' } = req.body ?? {};
-      const maxOrder = db.prepare(
-        `SELECT COALESCE(MAX(order_index), -1) as max_order FROM steps WHERE form_id = ?`
-      ).get(req.params.formId) as { max_order: number };
+      const maxOrder = await db.get<{ max_order: number }>(
+        `SELECT COALESCE(MAX(order_index), -1) as max_order FROM steps WHERE form_id = ?`, [req.params.formId]
+      );
 
-      db.prepare(`INSERT INTO steps (id, form_id, title, order_index) VALUES (?, ?, ?, ?)`)
-        .run(id, req.params.formId, title, maxOrder.max_order + 1);
+      await db.run(`INSERT INTO steps (id, form_id, title, order_index) VALUES (?, ?, ?, ?)`,
+        [id, req.params.formId, title, maxOrder!.max_order + 1]);
 
-      const step = db.prepare(`SELECT * FROM steps WHERE id = ?`).get(id);
+      const step = await db.get(`SELECT * FROM steps WHERE id = ?`, [id]);
       return { step };
     }
   );
@@ -44,16 +44,16 @@ export default async function stepRoutes(app: FastifyInstance) {
     '/api/forms/:formId/steps/:stepId',
     { preHandler: requireAuth },
     async (req, reply) => {
-      if (!ownedForm(req.params.formId, req.userId)) {
+      if (!(await ownedForm(req.params.formId, req.userId))) {
         return reply.status(404).send({ error: 'Form not found' });
       }
       const { title } = req.body ?? {};
-      const result = db.prepare(`UPDATE steps SET title = COALESCE(?, title) WHERE id = ? AND form_id = ?`)
-        .run(title ?? null, req.params.stepId, req.params.formId);
+      const result = await db.run(`UPDATE steps SET title = COALESCE(?, title) WHERE id = ? AND form_id = ?`,
+        [title ?? null, req.params.stepId, req.params.formId]);
       if (result.changes === 0) {
         return reply.status(404).send({ error: 'Step not found' });
       }
-      const step = db.prepare(`SELECT * FROM steps WHERE id = ?`).get(req.params.stepId);
+      const step = await db.get(`SELECT * FROM steps WHERE id = ?`, [req.params.stepId]);
       return { step };
     }
   );
@@ -64,23 +64,24 @@ export default async function stepRoutes(app: FastifyInstance) {
     '/api/forms/:formId/steps/:stepId',
     { preHandler: requireAuth },
     async (req, reply) => {
-      if (!ownedForm(req.params.formId, req.userId)) {
+      if (!(await ownedForm(req.params.formId, req.userId))) {
         return reply.status(404).send({ error: 'Form not found' });
       }
 
-      const step = db.prepare(`SELECT * FROM steps WHERE id = ? AND form_id = ?`)
-        .get(req.params.stepId, req.params.formId) as { order_index: number } | undefined;
+      const step = await db.get<{ order_index: number }>(`SELECT * FROM steps WHERE id = ? AND form_id = ?`,
+        [req.params.stepId, req.params.formId]);
       if (!step) {
         return reply.status(404).send({ error: 'Step not found' });
       }
 
-      const fallback = db.prepare(
-        `SELECT id FROM steps WHERE form_id = ? AND order_index < ? ORDER BY order_index DESC LIMIT 1`
-      ).get(req.params.formId, step.order_index) as { id: string } | undefined;
+      const fallback = await db.get<{ id: string }>(
+        `SELECT id FROM steps WHERE form_id = ? AND order_index < ? ORDER BY order_index DESC LIMIT 1`,
+        [req.params.formId, step.order_index]
+      );
 
-      db.prepare(`UPDATE questions SET step_id = ? WHERE step_id = ?`)
-        .run(fallback?.id ?? null, req.params.stepId);
-      db.prepare(`DELETE FROM steps WHERE id = ?`).run(req.params.stepId);
+      await db.run(`UPDATE questions SET step_id = ? WHERE step_id = ?`,
+        [fallback?.id ?? null, req.params.stepId]);
+      await db.run(`DELETE FROM steps WHERE id = ?`, [req.params.stepId]);
 
       return { success: true };
     }
@@ -91,7 +92,7 @@ export default async function stepRoutes(app: FastifyInstance) {
     '/api/forms/:formId/steps/reorder',
     { preHandler: requireAuth },
     async (req, reply) => {
-      if (!ownedForm(req.params.formId, req.userId)) {
+      if (!(await ownedForm(req.params.formId, req.userId))) {
         return reply.status(404).send({ error: 'Form not found' });
       }
       const { stepIds } = req.body;
@@ -99,15 +100,13 @@ export default async function stepRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'stepIds must be an array' });
       }
 
-      const updateStmt = db.prepare(`UPDATE steps SET order_index = ? WHERE id = ? AND form_id = ?`);
-      const reorderTransaction = db.transaction(() => {
-        stepIds.forEach((id, index) => {
-          updateStmt.run(index, id, req.params.formId);
-        });
+      await db.transaction(async (tx) => {
+        for (const [index, id] of stepIds.entries()) {
+          await tx.run(`UPDATE steps SET order_index = ? WHERE id = ? AND form_id = ?`, [index, id, req.params.formId]);
+        }
       });
-      reorderTransaction();
 
-      const steps = db.prepare(`SELECT * FROM steps WHERE form_id = ? ORDER BY order_index ASC`).all(req.params.formId);
+      const steps = await db.all(`SELECT * FROM steps WHERE form_id = ? ORDER BY order_index ASC`, [req.params.formId]);
       return { steps };
     }
   );

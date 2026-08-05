@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import db from '../db.js';
+import * as db from '../db.js';
 import { nanoid } from 'nanoid';
 import { requireAuth } from '../auth.js';
 import path from 'path';
@@ -18,17 +18,17 @@ export default async function submissionRoutes(app: FastifyInstance) {
   app.post<{ Params: { slug: string } }>(
     '/api/forms/public/:slug/submit',
     async (req, reply) => {
-      const form = db.prepare(
-        `SELECT * FROM forms WHERE slug = ? AND status = 'published'`
-      ).get(req.params.slug) as any;
+      const form = await db.get(
+        `SELECT * FROM forms WHERE slug = ? AND status = 'published'`, [req.params.slug]
+      ) as any;
 
       if (!form) {
         return reply.status(404).send({ error: 'Form not found or not published' });
       }
 
-      const questions = db.prepare(
-        `SELECT * FROM questions WHERE form_id = ? ORDER BY order_index ASC`
-      ).all(form.id) as any[];
+      const questions = await db.all(
+        `SELECT * FROM questions WHERE form_id = ? ORDER BY order_index ASC`, [form.id]
+      ) as any[];
 
       const submissionId = nanoid();
       const answersToInsert: { id: string; questionId: string; value: string; filePath: string | null; fileName: string | null }[] = [];
@@ -104,21 +104,15 @@ export default async function submissionRoutes(app: FastifyInstance) {
       }
 
       // Insert submission and answers in a transaction
-      const insertSubmission = db.prepare(
-        `INSERT INTO submissions (id, form_id) VALUES (?, ?)`
-      );
-      const insertAnswer = db.prepare(
-        `INSERT INTO answers (id, submission_id, question_id, value, file_path, file_name) VALUES (?, ?, ?, ?, ?, ?)`
-      );
-
-      const submitTransaction = db.transaction(() => {
-        insertSubmission.run(submissionId, form.id);
+      await db.transaction(async (tx) => {
+        await tx.run(`INSERT INTO submissions (id, form_id) VALUES (?, ?)`, [submissionId, form.id]);
         for (const answer of answersToInsert) {
-          insertAnswer.run(answer.id, submissionId, answer.questionId, answer.value, answer.filePath, answer.fileName);
+          await tx.run(
+            `INSERT INTO answers (id, submission_id, question_id, value, file_path, file_name) VALUES (?, ?, ?, ?, ?, ?)`,
+            [answer.id, submissionId, answer.questionId, answer.value, answer.filePath, answer.fileName]
+          );
         }
       });
-
-      submitTransaction();
 
       return { success: true, submissionId };
     }
@@ -129,33 +123,33 @@ export default async function submissionRoutes(app: FastifyInstance) {
     '/api/forms/:id/submissions',
     { preHandler: requireAuth },
     async (req, reply) => {
-      const form = db.prepare(`SELECT * FROM forms WHERE id = ? AND user_id = ?`).get(req.params.id, req.userId);
+      const form = await db.get(`SELECT * FROM forms WHERE id = ? AND user_id = ?`, [req.params.id, req.userId]);
       if (!form) {
         return reply.status(404).send({ error: 'Form not found' });
       }
 
-      const submissions = db.prepare(`
-        SELECT s.*, 
-          (SELECT COUNT(*) FROM answers a WHERE a.submission_id = s.id) as answer_count
-        FROM submissions s 
-        WHERE s.form_id = ? 
+      const submissions = await db.all(`
+        SELECT s.*,
+          (SELECT COUNT(*)::int FROM answers a WHERE a.submission_id = s.id) as answer_count
+        FROM submissions s
+        WHERE s.form_id = ?
         ORDER BY s.submitted_at DESC
-      `).all(req.params.id);
+      `, [req.params.id]);
 
       // Get a preview of answers for each submission
-      const getAnswers = db.prepare(`
+      const getAnswersPreview = (submissionId: string) => db.all(`
         SELECT a.value, a.file_name, q.label, q.type
         FROM answers a
         JOIN questions q ON a.question_id = q.id
         WHERE a.submission_id = ?
         ORDER BY q.order_index ASC
         LIMIT 3
-      `);
+      `, [submissionId]);
 
-      const submissionsWithPreview = (submissions as any[]).map(sub => ({
+      const submissionsWithPreview = await Promise.all((submissions as any[]).map(async sub => ({
         ...sub,
-        preview: getAnswers.all(sub.id)
-      }));
+        preview: await getAnswersPreview(sub.id)
+      })));
 
       return { submissions: submissionsWithPreview };
     }
@@ -166,26 +160,26 @@ export default async function submissionRoutes(app: FastifyInstance) {
     '/api/forms/:id/submissions/:submissionId',
     { preHandler: requireAuth },
     async (req, reply) => {
-      const form = db.prepare(`SELECT id FROM forms WHERE id = ? AND user_id = ?`).get(req.params.id, req.userId);
+      const form = await db.get(`SELECT id FROM forms WHERE id = ? AND user_id = ?`, [req.params.id, req.userId]);
       if (!form) {
         return reply.status(404).send({ error: 'Form not found' });
       }
 
-      const submission = db.prepare(
-        `SELECT * FROM submissions WHERE id = ? AND form_id = ?`
-      ).get(req.params.submissionId, req.params.id);
+      const submission = await db.get(
+        `SELECT * FROM submissions WHERE id = ? AND form_id = ?`, [req.params.submissionId, req.params.id]
+      );
 
       if (!submission) {
         return reply.status(404).send({ error: 'Submission not found' });
       }
 
-      const answers = db.prepare(`
+      const answers = await db.all(`
         SELECT a.*, q.label as question_label, q.type as question_type, q.options as question_options
         FROM answers a
         JOIN questions q ON a.question_id = q.id
         WHERE a.submission_id = ?
         ORDER BY q.order_index ASC
-      `).all(req.params.submissionId);
+      `, [req.params.submissionId]);
 
       return { submission, answers };
     }

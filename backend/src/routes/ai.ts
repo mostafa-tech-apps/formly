@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import db from '../db.js';
+import * as db from '../db.js';
 import { nanoid } from 'nanoid';
 import { requireAuth } from '../auth.js';
 import { askLLMJSON } from '../ai.js';
@@ -125,28 +125,27 @@ export default async function aiRoutes(app: FastifyInstance) {
     const formId = nanoid();
     const useSteps = steps.length > 1;
 
-    const create = db.transaction(() => {
-      db.prepare(`INSERT INTO forms (id, user_id, title, description) VALUES (?, ?, ?, ?)`)
-        .run(formId, req.userId, title, description ?? '');
+    await db.transaction(async (tx) => {
+      await tx.run(`INSERT INTO forms (id, user_id, title, description) VALUES (?, ?, ?, ?)`,
+        [formId, req.userId, title, description ?? '']);
 
       let questionOrder = 0;
-      steps.forEach((step, stepIndex) => {
+      for (const [stepIndex, step] of steps.entries()) {
         const stepId = useSteps ? nanoid() : null;
         if (useSteps && stepId) {
-          db.prepare(`INSERT INTO steps (id, form_id, title, order_index) VALUES (?, ?, ?, ?)`)
-            .run(stepId, formId, step.title ?? '', stepIndex);
+          await tx.run(`INSERT INTO steps (id, form_id, title, order_index) VALUES (?, ?, ?, ?)`,
+            [stepId, formId, step.title ?? '', stepIndex]);
         }
         for (const q of step.questions ?? []) {
-          db.prepare(`
+          await tx.run(`
             INSERT INTO questions (id, form_id, step_id, type, label, required, options, order_index)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(nanoid(), formId, stepId, q.type, q.label, q.required ? 1 : 0, JSON.stringify(q.options ?? []), questionOrder++);
+          `, [nanoid(), formId, stepId, q.type, q.label, q.required ? 1 : 0, JSON.stringify(q.options ?? []), questionOrder++]);
         }
-      });
+      }
     });
-    create();
 
-    const form = db.prepare(`SELECT * FROM forms WHERE id = ?`).get(formId);
+    const form = await db.get(`SELECT * FROM forms WHERE id = ?`, [formId]);
     return { form };
   });
 }

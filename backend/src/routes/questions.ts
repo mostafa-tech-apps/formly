@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import db from '../db.js';
+import * as db from '../db.js';
 import { nanoid } from 'nanoid';
 import { requireAuth } from '../auth.js';
 
@@ -22,7 +22,7 @@ export default async function questionRoutes(app: FastifyInstance) {
     '/api/forms/:formId/questions',
     { preHandler: requireAuth },
     async (req, reply) => {
-      const form = db.prepare(`SELECT * FROM forms WHERE id = ? AND user_id = ?`).get(req.params.formId, req.userId);
+      const form = await db.get(`SELECT * FROM forms WHERE id = ? AND user_id = ?`, [req.params.formId, req.userId]);
       if (!form) {
         return reply.status(404).send({ error: 'Form not found' });
       }
@@ -31,29 +31,29 @@ export default async function questionRoutes(app: FastifyInstance) {
       const { type = 'text', label = '', required = false, options = [], visibility_rules = null, step_id = null } = req.body;
 
       // Get next order index
-      const maxOrder = db.prepare(
-        `SELECT COALESCE(MAX(order_index), -1) as max_order FROM questions WHERE form_id = ?`
-      ).get(req.params.formId) as { max_order: number };
+      const maxOrder = await db.get<{ max_order: number }>(
+        `SELECT COALESCE(MAX(order_index), -1) as max_order FROM questions WHERE form_id = ?`, [req.params.formId]
+      );
 
-      db.prepare(`
+      await db.run(`
         INSERT INTO questions (id, form_id, type, label, required, options, order_index, visibility_rules, step_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
+      `, [
         id,
         req.params.formId,
         type,
         label,
         required ? 1 : 0,
         JSON.stringify(options),
-        maxOrder.max_order + 1,
+        maxOrder!.max_order + 1,
         visibility_rules ? JSON.stringify(visibility_rules) : null,
         step_id
-      );
+      ]);
 
       // Update form timestamp
-      db.prepare(`UPDATE forms SET updated_at = datetime('now') WHERE id = ?`).run(req.params.formId);
+      await db.run(`UPDATE forms SET updated_at = now() WHERE id = ?`, [req.params.formId]);
 
-      const question = db.prepare(`SELECT * FROM questions WHERE id = ?`).get(id);
+      const question = await db.get(`SELECT * FROM questions WHERE id = ?`, [id]);
       return { question };
     }
   );
@@ -63,13 +63,13 @@ export default async function questionRoutes(app: FastifyInstance) {
     '/api/forms/:formId/questions/:questionId',
     { preHandler: requireAuth },
     async (req, reply) => {
-      const form = db.prepare(`SELECT id FROM forms WHERE id = ? AND user_id = ?`).get(req.params.formId, req.userId);
+      const form = await db.get(`SELECT id FROM forms WHERE id = ? AND user_id = ?`, [req.params.formId, req.userId]);
       if (!form) {
         return reply.status(404).send({ error: 'Form not found' });
       }
-      const question = db.prepare(
-        `SELECT * FROM questions WHERE id = ? AND form_id = ?`
-      ).get(req.params.questionId, req.params.formId);
+      const question = await db.get(
+        `SELECT * FROM questions WHERE id = ? AND form_id = ?`, [req.params.questionId, req.params.formId]
+      );
       if (!question) {
         return reply.status(404).send({ error: 'Question not found' });
       }
@@ -106,17 +106,17 @@ export default async function questionRoutes(app: FastifyInstance) {
 
       if (updates.length > 0) {
         params.push(req.params.questionId, req.params.formId);
-        db.prepare(`
+        await db.run(`
           UPDATE questions
           SET ${updates.join(', ')}
           WHERE id = ? AND form_id = ?
-        `).run(...params);
+        `, params);
       }
 
       // Update form timestamp
-      db.prepare(`UPDATE forms SET updated_at = datetime('now') WHERE id = ?`).run(req.params.formId);
+      await db.run(`UPDATE forms SET updated_at = now() WHERE id = ?`, [req.params.formId]);
 
-      const updated = db.prepare(`SELECT * FROM questions WHERE id = ?`).get(req.params.questionId);
+      const updated = await db.get(`SELECT * FROM questions WHERE id = ?`, [req.params.questionId]);
       return { question: updated };
     }
   );
@@ -126,40 +126,38 @@ export default async function questionRoutes(app: FastifyInstance) {
     '/api/forms/:formId/questions/:questionId',
     { preHandler: requireAuth },
     async (req, reply) => {
-      const form = db.prepare(`SELECT status FROM forms WHERE id = ? AND user_id = ?`).get(req.params.formId, req.userId) as { status: string } | undefined;
+      const form = await db.get<{ status: string }>(`SELECT status FROM forms WHERE id = ? AND user_id = ?`, [req.params.formId, req.userId]);
       if (!form) {
         return reply.status(404).send({ error: 'Form not found' });
       }
       if (form.status === 'published') {
-        const qCount = db.prepare(`SELECT COUNT(*) as count FROM questions WHERE form_id = ?`).get(req.params.formId) as { count: number };
-        if (qCount.count <= 1) {
+        const qCount = await db.get<{ count: number }>(`SELECT COUNT(*)::int as count FROM questions WHERE form_id = ?`, [req.params.formId]);
+        if (qCount!.count <= 1) {
           return reply.status(400).send({ error: 'A published form must have at least one question. Change it to Draft first to remove all questions.' });
         }
       }
 
-      const result = db.prepare(
-        `DELETE FROM questions WHERE id = ? AND form_id = ?`
-      ).run(req.params.questionId, req.params.formId);
+      const result = await db.run(
+        `DELETE FROM questions WHERE id = ? AND form_id = ?`, [req.params.questionId, req.params.formId]
+      );
 
       if (result.changes === 0) {
         return reply.status(404).send({ error: 'Question not found' });
       }
 
       // Re-index remaining questions
-      const remaining = db.prepare(
-        `SELECT id FROM questions WHERE form_id = ? ORDER BY order_index ASC`
-      ).all(req.params.formId) as { id: string }[];
+      const remaining = await db.all<{ id: string }>(
+        `SELECT id FROM questions WHERE form_id = ? ORDER BY order_index ASC`, [req.params.formId]
+      );
 
-      const updateStmt = db.prepare(`UPDATE questions SET order_index = ? WHERE id = ?`);
-      const reindexTransaction = db.transaction(() => {
-        remaining.forEach((q, index) => {
-          updateStmt.run(index, q.id);
-        });
+      await db.transaction(async (tx) => {
+        for (const [index, q] of remaining.entries()) {
+          await tx.run(`UPDATE questions SET order_index = ? WHERE id = ?`, [index, q.id]);
+        }
       });
-      reindexTransaction();
 
       // Update form timestamp
-      db.prepare(`UPDATE forms SET updated_at = datetime('now') WHERE id = ?`).run(req.params.formId);
+      await db.run(`UPDATE forms SET updated_at = now() WHERE id = ?`, [req.params.formId]);
 
       return { success: true };
     }
@@ -170,7 +168,7 @@ export default async function questionRoutes(app: FastifyInstance) {
     '/api/forms/:formId/questions/reorder',
     { preHandler: requireAuth },
     async (req, reply) => {
-      const form = db.prepare(`SELECT id FROM forms WHERE id = ? AND user_id = ?`).get(req.params.formId, req.userId);
+      const form = await db.get(`SELECT id FROM forms WHERE id = ? AND user_id = ?`, [req.params.formId, req.userId]);
       if (!form) {
         return reply.status(404).send({ error: 'Form not found' });
       }
@@ -180,20 +178,18 @@ export default async function questionRoutes(app: FastifyInstance) {
         return reply.status(400).send({ error: 'questionIds must be an array' });
       }
 
-      const updateStmt = db.prepare(`UPDATE questions SET order_index = ? WHERE id = ? AND form_id = ?`);
-      const reorderTransaction = db.transaction(() => {
-        questionIds.forEach((id, index) => {
-          updateStmt.run(index, id, req.params.formId);
-        });
+      await db.transaction(async (tx) => {
+        for (const [index, id] of questionIds.entries()) {
+          await tx.run(`UPDATE questions SET order_index = ? WHERE id = ? AND form_id = ?`, [index, id, req.params.formId]);
+        }
       });
-      reorderTransaction();
 
       // Update form timestamp
-      db.prepare(`UPDATE forms SET updated_at = datetime('now') WHERE id = ?`).run(req.params.formId);
+      await db.run(`UPDATE forms SET updated_at = now() WHERE id = ?`, [req.params.formId]);
 
-      const questions = db.prepare(
-        `SELECT * FROM questions WHERE form_id = ? ORDER BY order_index ASC`
-      ).all(req.params.formId);
+      const questions = await db.all(
+        `SELECT * FROM questions WHERE form_id = ? ORDER BY order_index ASC`, [req.params.formId]
+      );
 
       return { questions };
     }

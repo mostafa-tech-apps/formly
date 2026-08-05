@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { nanoid } from 'nanoid';
-import db from './db.js';
+import * as db from './db.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -33,14 +33,14 @@ export function generateApiToken(): string {
   return `formly_${nanoid(32)}`;
 }
 
-export function createSession(userId: string): string {
+export async function createSession(userId: string): Promise<string> {
   const id = nanoid(32);
-  db.prepare(`INSERT INTO sessions (id, user_id) VALUES (?, ?)`).run(id, userId);
+  await db.run(`INSERT INTO sessions (id, user_id) VALUES (?, ?)`, [id, userId]);
   return id;
 }
 
-export function destroySession(sessionId: string) {
-  db.prepare(`DELETE FROM sessions WHERE id = ?`).run(sessionId);
+export async function destroySession(sessionId: string) {
+  await db.run(`DELETE FROM sessions WHERE id = ?`, [sessionId]);
 }
 
 // Resolves the caller's identity from either an Authorization: Bearer <api token>
@@ -50,7 +50,7 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
   const authHeader = req.headers.authorization;
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
-    const user = db.prepare(`SELECT id FROM users WHERE api_token_hash = ?`).get(hashToken(token)) as { id: string } | undefined;
+    const user = await db.get<{ id: string }>(`SELECT id FROM users WHERE api_token_hash = ?`, [hashToken(token)]);
     if (!user) {
       return reply.status(401).send({ error: 'Invalid API token' });
     }
@@ -60,7 +60,7 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply) {
 
   const sessionId = req.cookies[SESSION_COOKIE];
   const session = sessionId
-    ? (db.prepare(`SELECT user_id FROM sessions WHERE id = ?`).get(sessionId) as { user_id: string } | undefined)
+    ? await db.get<{ user_id: string }>(`SELECT user_id FROM sessions WHERE id = ?`, [sessionId])
     : undefined;
 
   if (!session) {
