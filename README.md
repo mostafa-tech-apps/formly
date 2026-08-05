@@ -196,8 +196,10 @@ npm test
 The config starts both the backend and frontend dev servers automatically
 (`e2e/playwright.config.ts`) if they aren't already running.
 
-**CI** (`.github/workflows/ci.yml`) runs all of the above — typecheck, unit tests, and
-the full e2e suite — on every push and pull request.
+**CI** (`.github/workflows/ci.yml`) runs on every push and pull request as two parallel
+jobs: `lint` (typecheck + eslint for both apps) and `verify` (unit tests plus the full
+e2e suite, against a throwaway `postgres:18` service container so it needs no external
+database or secrets).
 
 ## Technical Notes
 
