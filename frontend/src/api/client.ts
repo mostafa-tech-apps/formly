@@ -12,6 +12,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
   const res = await fetch(`${API_BASE}${url}`, {
     ...options,
+    credentials: 'include',
     headers: {
       ...headers,
       ...options?.headers,
@@ -29,6 +30,22 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
 // Forms
 export const api = {
+  // Auth
+  signup: (email: string, password: string) =>
+    request<{ user: { id: string; email: string } }>('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
+  login: (email: string, password: string) =>
+    request<{ user: { id: string; email: string } }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    }),
+  logout: () => request<{ success: boolean }>('/auth/logout', { method: 'POST' }),
+  me: () => request<{ user: { id: string; email: string; hasApiToken: boolean } }>('/auth/me'),
+  generateApiToken: () => request<{ token: string }>('/auth/token', { method: 'POST' }),
+  revokeApiToken: () => request<{ success: boolean }>('/auth/token', { method: 'DELETE' }),
+
   // Forms
   listForms: () => request<{ forms: any[] }>('/forms'),
   createForm: () => request<{ form: any }>('/forms', { method: 'POST' }),

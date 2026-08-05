@@ -17,14 +17,31 @@ db.pragma('foreign_keys = ON');
 
 // Initialize schema
 db.exec(`
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    api_token_hash TEXT UNIQUE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS forms (
     id TEXT PRIMARY KEY,
+    user_id TEXT,
     title TEXT NOT NULL DEFAULT 'Untitled Form',
     description TEXT DEFAULT '',
     status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft', 'published')),
     slug TEXT UNIQUE,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS questions (
@@ -62,14 +79,23 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_submissions_form_id ON submissions(form_id);
   CREATE INDEX IF NOT EXISTS idx_answers_submission_id ON answers(submission_id);
   CREATE INDEX IF NOT EXISTS idx_forms_slug ON forms(slug);
+  CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 `);
 
-try {
-  db.exec(`ALTER TABLE questions ADD COLUMN visibility_rules TEXT DEFAULT NULL;`);
-} catch (e: any) {
-  if (!e.message.includes('duplicate column name')) {
-    console.error('Migration error:', e);
+function migrate(sql: string) {
+  try {
+    db.exec(sql);
+  } catch (e: any) {
+    if (!e.message.includes('duplicate column name')) {
+      console.error('Migration error:', e);
+    }
   }
 }
+
+migrate(`ALTER TABLE questions ADD COLUMN visibility_rules TEXT DEFAULT NULL;`);
+migrate(`ALTER TABLE forms ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE;`);
+
+// Must run after the user_id migration above, since forms may not have had that column yet.
+db.exec(`CREATE INDEX IF NOT EXISTS idx_forms_user_id ON forms(user_id);`);
 
 export default db;

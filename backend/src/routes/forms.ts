@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import db from '../db.js';
 import { nanoid } from 'nanoid';
+import { requireAuth } from '../auth.js';
 
 interface FormBody {
   title?: string;
@@ -22,29 +23,30 @@ function uniqueSlug(base: string): string {
 }
 
 export default async function formRoutes(app: FastifyInstance) {
-  // List all forms
-  app.get('/api/forms', async () => {
+  // List all forms owned by the caller
+  app.get('/api/forms', { preHandler: requireAuth }, async (req) => {
     const forms = db.prepare(`
-      SELECT f.*, 
+      SELECT f.*,
         (SELECT COUNT(*) FROM submissions s WHERE s.form_id = f.id) as submission_count,
         (SELECT COUNT(*) FROM questions q WHERE q.form_id = f.id) as question_count
       FROM forms f
+      WHERE f.user_id = ?
       ORDER BY f.updated_at DESC
-    `).all();
+    `).all(req.userId);
     return { forms };
   });
 
-  // Create a form
-  app.post('/api/forms', async () => {
+  // Create a form owned by the caller
+  app.post('/api/forms', { preHandler: requireAuth }, async (req) => {
     const id = nanoid();
-    db.prepare(`INSERT INTO forms (id) VALUES (?)`).run(id);
+    db.prepare(`INSERT INTO forms (id, user_id) VALUES (?, ?)`).run(id, req.userId);
     const form = db.prepare(`SELECT * FROM forms WHERE id = ?`).get(id);
     return { form };
   });
 
-  // Get a single form with questions
-  app.get<{ Params: { id: string } }>('/api/forms/:id', async (req, reply) => {
-    const form = db.prepare(`SELECT * FROM forms WHERE id = ?`).get(req.params.id);
+  // Get a single form with questions (must be owned by the caller)
+  app.get<{ Params: { id: string } }>('/api/forms/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const form = db.prepare(`SELECT * FROM forms WHERE id = ? AND user_id = ?`).get(req.params.id, req.userId);
     if (!form) {
       return reply.status(404).send({ error: 'Form not found' });
     }
@@ -54,9 +56,9 @@ export default async function formRoutes(app: FastifyInstance) {
     return { form, questions };
   });
 
-  // Update a form
-  app.put<{ Params: { id: string }; Body: FormBody }>('/api/forms/:id', async (req, reply) => {
-    const form = db.prepare(`SELECT * FROM forms WHERE id = ?`).get(req.params.id) as any;
+  // Update a form (must be owned by the caller)
+  app.put<{ Params: { id: string }; Body: FormBody }>('/api/forms/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const form = db.prepare(`SELECT * FROM forms WHERE id = ? AND user_id = ?`).get(req.params.id, req.userId) as any;
     if (!form) {
       return reply.status(404).send({ error: 'Form not found' });
     }
@@ -76,14 +78,14 @@ export default async function formRoutes(app: FastifyInstance) {
     }
 
     db.prepare(`
-      UPDATE forms 
+      UPDATE forms
       SET title = COALESCE(?, title),
           description = COALESCE(?, description),
           status = COALESCE(?, status),
           slug = COALESCE(?, slug),
           updated_at = datetime('now')
-      WHERE id = ?
-    `).run(title ?? null, description ?? null, status ?? null, slug, req.params.id);
+      WHERE id = ? AND user_id = ?
+    `).run(title ?? null, description ?? null, status ?? null, slug, req.params.id, req.userId);
 
     const updated = db.prepare(`
       SELECT f.*, 
@@ -94,9 +96,9 @@ export default async function formRoutes(app: FastifyInstance) {
     return { form: updated };
   });
 
-  // Delete a form
-  app.delete<{ Params: { id: string } }>('/api/forms/:id', async (req, reply) => {
-    const result = db.prepare(`DELETE FROM forms WHERE id = ?`).run(req.params.id);
+  // Delete a form (must be owned by the caller)
+  app.delete<{ Params: { id: string } }>('/api/forms/:id', { preHandler: requireAuth }, async (req, reply) => {
+    const result = db.prepare(`DELETE FROM forms WHERE id = ? AND user_id = ?`).run(req.params.id, req.userId);
     if (result.changes === 0) {
       return reply.status(404).send({ error: 'Form not found' });
     }

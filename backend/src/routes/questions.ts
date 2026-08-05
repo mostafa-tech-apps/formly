@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import db from '../db.js';
 import { nanoid } from 'nanoid';
+import { requireAuth } from '../auth.js';
 
 interface QuestionBody {
   type?: 'text' | 'multiple_choice' | 'file_upload';
@@ -18,8 +19,9 @@ export default async function questionRoutes(app: FastifyInstance) {
   // Add a question to a form
   app.post<{ Params: { formId: string }; Body: QuestionBody }>(
     '/api/forms/:formId/questions',
+    { preHandler: requireAuth },
     async (req, reply) => {
-      const form = db.prepare(`SELECT * FROM forms WHERE id = ?`).get(req.params.formId);
+      const form = db.prepare(`SELECT * FROM forms WHERE id = ? AND user_id = ?`).get(req.params.formId, req.userId);
       if (!form) {
         return reply.status(404).send({ error: 'Form not found' });
       }
@@ -57,7 +59,12 @@ export default async function questionRoutes(app: FastifyInstance) {
   // Update a question
   app.put<{ Params: { formId: string; questionId: string }; Body: QuestionBody }>(
     '/api/forms/:formId/questions/:questionId',
+    { preHandler: requireAuth },
     async (req, reply) => {
+      const form = db.prepare(`SELECT id FROM forms WHERE id = ? AND user_id = ?`).get(req.params.formId, req.userId);
+      if (!form) {
+        return reply.status(404).send({ error: 'Form not found' });
+      }
       const question = db.prepare(
         `SELECT * FROM questions WHERE id = ? AND form_id = ?`
       ).get(req.params.questionId, req.params.formId);
@@ -111,9 +118,13 @@ export default async function questionRoutes(app: FastifyInstance) {
   // Delete a question
   app.delete<{ Params: { formId: string; questionId: string } }>(
     '/api/forms/:formId/questions/:questionId',
+    { preHandler: requireAuth },
     async (req, reply) => {
-      const form = db.prepare(`SELECT status FROM forms WHERE id = ?`).get(req.params.formId) as { status: string } | undefined;
-      if (form && form.status === 'published') {
+      const form = db.prepare(`SELECT status FROM forms WHERE id = ? AND user_id = ?`).get(req.params.formId, req.userId) as { status: string } | undefined;
+      if (!form) {
+        return reply.status(404).send({ error: 'Form not found' });
+      }
+      if (form.status === 'published') {
         const qCount = db.prepare(`SELECT COUNT(*) as count FROM questions WHERE form_id = ?`).get(req.params.formId) as { count: number };
         if (qCount.count <= 1) {
           return reply.status(400).send({ error: 'A published form must have at least one question. Change it to Draft first to remove all questions.' });
@@ -151,7 +162,13 @@ export default async function questionRoutes(app: FastifyInstance) {
   // Reorder questions
   app.put<{ Params: { formId: string }; Body: ReorderBody }>(
     '/api/forms/:formId/questions/reorder',
+    { preHandler: requireAuth },
     async (req, reply) => {
+      const form = db.prepare(`SELECT id FROM forms WHERE id = ? AND user_id = ?`).get(req.params.formId, req.userId);
+      if (!form) {
+        return reply.status(404).send({ error: 'Form not found' });
+      }
+
       const { questionIds } = req.body;
       if (!Array.isArray(questionIds)) {
         return reply.status(400).send({ error: 'questionIds must be an array' });

@@ -1,10 +1,12 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
+import authRoutes from './routes/auth.js';
 import formRoutes from './routes/forms.js';
 import questionRoutes from './routes/questions.js';
 import submissionRoutes from './routes/submissions.js';
@@ -27,6 +29,8 @@ await app.register(cors, {
   credentials: true
 });
 
+await app.register(cookie);
+
 await app.register(multipart, {
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB
@@ -41,6 +45,7 @@ await app.register(fastifyStatic, {
 });
 
 // Register routes
+await app.register(authRoutes);
 await app.register(formRoutes);
 await app.register(questionRoutes);
 await app.register(submissionRoutes);

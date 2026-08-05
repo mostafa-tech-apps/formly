@@ -6,7 +6,7 @@ import { z } from 'zod';
 const questionType = z.enum(['text', 'multiple_choice', 'file_upload']);
 const formStatus = z.enum(['draft', 'published']);
 
-function buildMcpServer(app: FastifyInstance) {
+function buildMcpServer(app: FastifyInstance, apiToken: string) {
   const server = new McpServer({ name: 'formly', version: '1.0.0' });
 
   function textResult(data: unknown) {
@@ -14,7 +14,12 @@ function buildMcpServer(app: FastifyInstance) {
   }
 
   async function call(method: string, url: string, payload?: Record<string, unknown>) {
-    const res = await app.inject({ method: method as any, url, payload });
+    const res = await app.inject({
+      method: method as any,
+      url,
+      payload,
+      headers: { authorization: `Bearer ${apiToken}` },
+    });
     const data = res.json();
     if (res.statusCode >= 400) {
       throw new Error((data as any)?.error ?? `Request failed with status ${res.statusCode}`);
@@ -156,10 +161,18 @@ function buildMcpServer(app: FastifyInstance) {
 }
 
 const methodNotAllowed = { jsonrpc: '2.0', error: { code: -32000, message: 'Method not allowed.' }, id: null };
+const unauthorized = { jsonrpc: '2.0', error: { code: -32001, message: 'Unauthorized. Provide an Authorization: Bearer <api token> header.' }, id: null };
 
 export default async function mcpRoutes(app: FastifyInstance) {
   app.post('/mcp', async (req, reply) => {
-    const server = buildMcpServer(app);
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ') || authHeader.length <= 7) {
+      reply.header('WWW-Authenticate', 'Bearer');
+      return reply.code(401).send(unauthorized);
+    }
+    const apiToken = authHeader.slice(7);
+
+    const server = buildMcpServer(app, apiToken);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
 
     reply.raw.on('close', () => {

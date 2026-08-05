@@ -595,6 +595,31 @@ a:hover { text-decoration: underline; }
   margin-bottom: 1rem;
 }
 
+/* Auth pages */
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+}
+.auth-card:hover {
+  background: var(--bg-card);
+  border-color: var(--border);
+  box-shadow: none;
+}
+.auth-switch {
+  margin-top: 1.25rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+.auth-switch a { color: var(--accent); font-weight: 600; }
+
 /* Back link */
 .back-link {
   display: inline-flex; align-items: center; gap: 0.4rem;

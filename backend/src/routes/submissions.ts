@@ -1,6 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import db from '../db.js';
 import { nanoid } from 'nanoid';
+import { requireAuth } from '../auth.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -126,8 +127,9 @@ export default async function submissionRoutes(app: FastifyInstance) {
   // List submissions for a form
   app.get<{ Params: { id: string } }>(
     '/api/forms/:id/submissions',
+    { preHandler: requireAuth },
     async (req, reply) => {
-      const form = db.prepare(`SELECT * FROM forms WHERE id = ?`).get(req.params.id);
+      const form = db.prepare(`SELECT * FROM forms WHERE id = ? AND user_id = ?`).get(req.params.id, req.userId);
       if (!form) {
         return reply.status(404).send({ error: 'Form not found' });
       }
@@ -162,7 +164,13 @@ export default async function submissionRoutes(app: FastifyInstance) {
   // Get a single submission with all answers
   app.get<{ Params: { id: string; submissionId: string } }>(
     '/api/forms/:id/submissions/:submissionId',
+    { preHandler: requireAuth },
     async (req, reply) => {
+      const form = db.prepare(`SELECT id FROM forms WHERE id = ? AND user_id = ?`).get(req.params.id, req.userId);
+      if (!form) {
+        return reply.status(404).send({ error: 'Form not found' });
+      }
+
       const submission = db.prepare(
         `SELECT * FROM submissions WHERE id = ? AND form_id = ?`
       ).get(req.params.submissionId, req.params.id);

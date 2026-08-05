@@ -24,7 +24,8 @@ Built with **React**, **Vite**, **TypeScript** on the frontend, and **Fastify** 
 - **Public Submissions:** Dedicated, unauthenticated pages for users to view and fill out forms. 
 - **Analytics & Submissions:** Dashboard to view all gathered responses and file uploads.
 - **Dark Mode UI:** Sleek, premium aesthetic with smooth micro-animations.
-- **MCP Server:** The backend exposes an MCP endpoint at `/mcp`, so any MCP client (Claude Code, Claude Desktop) can create and manage forms through natural language. See [MCP Server](#mcp-server) below.
+- **Accounts:** Email/password signup and login. Each user only sees and manages their own forms — the dashboard, form builder, and submissions views all require an authenticated session. Published forms remain fully public and unauthenticated for respondents.
+- **MCP Server:** The backend exposes an MCP endpoint at `/mcp`, authenticated with a per-account API token, so any MCP client (Claude Code, Claude Desktop) can create and manage that user's forms through natural language. See [MCP Server](#mcp-server) below.
 
 ## Project Structure
 
@@ -90,6 +91,21 @@ The backend relies on SQLite and stores its database locally.
 5. **Publish:** Toggle the status switch to "Published" to generate a public link.
 6. **Share:** Copy the URL and share it to start collecting submissions!
 
+## Accounts & Auth
+
+Signup/login is email + password (`backend/src/auth.ts`, `backend/src/routes/auth.ts`).
+Passwords are hashed with `crypto.scryptSync` (no extra dependency). A logged-in session
+is an opaque token in an httpOnly cookie, backed by a `sessions` table — logging out just
+deletes the row. Every form/question/submission route (except the public `/api/forms/public/*`
+ones) requires a valid session and scopes all queries to `req.userId`; there's no way to
+read or modify another account's forms through the API.
+
+Each account can also generate a separate, long-lived **API token** from Settings
+(`POST /api/auth/token`) for MCP access — shown once, stored only as a SHA-256 hash,
+regenerate/revoke any time. It's independent of the session cookie: `requireAuth` accepts
+either an `Authorization: Bearer <token>` header or the session cookie, so the exact same
+route handlers serve both the dashboard and the MCP server.
+
 ## MCP Server
 
 The Fastify backend hosts an MCP (Model Context Protocol) server at `/mcp`, using the
@@ -97,13 +113,18 @@ Streamable HTTP transport. It exposes 11 tools that mirror the REST API one-to-o
 `list_forms`, `get_form`, `create_form`, `update_form`, `delete_form`, `add_question`,
 `update_question`, `delete_question`, `reorder_questions`, `list_submissions`, and
 `get_submission` — implemented in `backend/src/routes/mcp.ts` by calling the same route
-handlers in-process via `app.inject()`, so there's no separate copy of the business logic
-(slug generation, publish rules, etc.) to keep in sync.
+handlers in-process via `app.inject()`, forwarding the caller's API token on every call,
+so there's no separate copy of the business logic (slug generation, publish rules, auth
+scoping) to keep in sync.
+
+Every `/mcp` request requires `Authorization: Bearer <token>` using the API token from
+Settings — there's no anonymous access, and each token only sees that account's forms.
 
 Connect from Claude Code:
 
 ```bash
-claude mcp add --transport http formly https://formly-4gbd.onrender.com/mcp
+claude mcp add --transport http formly https://formly-4gbd.onrender.com/mcp \
+  --header "Authorization: Bearer <your-token>"
 ```
 
 Or add to an MCP client config directly:
@@ -113,14 +134,28 @@ Or add to an MCP client config directly:
   "mcpServers": {
     "formly": {
       "type": "http",
-      "url": "https://formly-4gbd.onrender.com/mcp"
+      "url": "https://formly-4gbd.onrender.com/mcp",
+      "headers": { "Authorization": "Bearer <your-token>" }
     }
   }
 }
 ```
 
-There's no auth on the API, so the MCP server has the same access anyone with the URL
-has — full read/write on every form.
+## Testing
+
+End-to-end tests live in `/e2e` (Playwright), covering the auth flow (signup, login,
+logout, route guarding, account isolation, MCP token generation) and the public form
+page (view + submit with zero authentication, unknown-slug handling).
+
+```bash
+cd e2e
+npm install
+npx playwright install chromium  # first run only, if not using --channel chrome
+npm test
+```
+
+The config starts both the backend and frontend dev servers automatically
+(`e2e/playwright.config.ts`) if they aren't already running.
 
 ## Technical Notes
 
