@@ -85,6 +85,14 @@ export default async function questionRoutes(app: FastifyInstance) {
   app.delete<{ Params: { formId: string; questionId: string } }>(
     '/api/forms/:formId/questions/:questionId',
     async (req, reply) => {
+      const form = db.prepare(`SELECT status FROM forms WHERE id = ?`).get(req.params.formId) as { status: string } | undefined;
+      if (form && form.status === 'published') {
+        const qCount = db.prepare(`SELECT COUNT(*) as count FROM questions WHERE form_id = ?`).get(req.params.formId) as { count: number };
+        if (qCount.count <= 1) {
+          return reply.status(400).send({ error: 'A published form must have at least one question. Change it to Draft first to remove all questions.' });
+        }
+      }
+
       const result = db.prepare(
         `DELETE FROM questions WHERE id = ? AND form_id = ?`
       ).run(req.params.questionId, req.params.formId);

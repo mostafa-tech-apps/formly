@@ -51,9 +51,15 @@ export default async function formRoutes(app: FastifyInstance) {
     const { title, description, status } = req.body;
     let slug = form.slug;
 
-    // Generate slug when publishing for the first time
-    if (status === 'published' && !form.slug) {
-      slug = nanoid(10);
+    if (status === 'published') {
+      const qCount = db.prepare(`SELECT COUNT(*) as count FROM questions WHERE form_id = ?`).get(req.params.id) as { count: number };
+      if (qCount.count === 0) {
+        return reply.status(400).send({ error: 'A form must have at least one question to be published.' });
+      }
+      // Generate slug when publishing for the first time
+      if (!form.slug) {
+        slug = nanoid(10);
+      }
     }
 
     db.prepare(`

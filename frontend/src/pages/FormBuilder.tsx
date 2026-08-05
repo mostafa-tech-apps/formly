@@ -50,6 +50,10 @@ export default function FormBuilder() {
 
   const togglePublish = async () => {
     const newStatus = form?.status === 'published' ? 'draft' : 'published';
+    if (newStatus === 'published' && questions.length === 0) {
+      showToast('A form must have at least one question to be published.', 'error');
+      return;
+    }
     await saveForm({ status: newStatus });
   };
 
