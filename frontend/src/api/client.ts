@@ -108,11 +108,59 @@ export const api = {
     request<{ label: string }>('/ai/improve-question', { method: 'POST', body: JSON.stringify({ label }) }),
   suggestOptions: (label: string) =>
     request<{ options: string[] }>('/ai/suggest-options', { method: 'POST', body: JSON.stringify({ label }) }),
-  planForm: (prompt: string) =>
-    request<{ plan: FormPlan }>('/ai/plan-form', { method: 'POST', body: JSON.stringify({ prompt }) }),
   createFormFromPlan: (plan: FormPlan) =>
     request<{ form: any }>('/ai/create-form', { method: 'POST', body: JSON.stringify(plan) }),
 };
+
+// Streams the agentic form-planning pipeline. Not on the `api` object since it's
+// callback-driven/void-returning rather than a plain request/response call.
+export interface SSEEvent {
+  event: string;
+  data: any;
+}
+
+export async function streamPlanForm(
+  body: { conversationId?: string; message: string },
+  onEvent: (evt: SSEEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/ai/plan-form`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+
+  if (!res.ok || !res.body) {
+    const error = await res.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(error.error || `HTTP ${res.status}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let sep: number;
+    while ((sep = buffer.indexOf('\n\n')) !== -1) {
+      const frame = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+
+      let event = 'message';
+      let dataLine = '';
+      for (const line of frame.split('\n')) {
+        if (line.startsWith('event: ')) event = line.slice(7);
+        else if (line.startsWith('data: ')) dataLine += line.slice(6);
+      }
+      if (dataLine) onEvent({ event, data: JSON.parse(dataLine) });
+    }
+  }
+}
 
 export interface PlannedQuestion {
   type: 'text' | 'multiple_choice' | 'file_upload';

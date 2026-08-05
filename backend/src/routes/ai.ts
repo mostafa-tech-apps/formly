@@ -3,58 +3,8 @@ import db from '../db.js';
 import { nanoid } from 'nanoid';
 import { requireAuth } from '../auth.js';
 import { askClaudeJSON } from '../ai.js';
-
-interface PlannedQuestion {
-  type: 'text' | 'multiple_choice' | 'file_upload';
-  label: string;
-  required: boolean;
-  options: string[];
-}
-
-interface PlannedStep {
-  title: string;
-  questions: PlannedQuestion[];
-}
-
-interface FormPlan {
-  title: string;
-  description: string;
-  steps: PlannedStep[];
-}
-
-const questionSchema = {
-  type: 'object',
-  properties: {
-    type: { type: 'string', enum: ['text', 'multiple_choice', 'file_upload'] },
-    label: { type: 'string' },
-    required: { type: 'boolean' },
-    options: { type: 'array', items: { type: 'string' } },
-  },
-  required: ['type', 'label', 'required', 'options'],
-  additionalProperties: false,
-};
-
-const formPlanSchema = {
-  type: 'object',
-  properties: {
-    title: { type: 'string' },
-    description: { type: 'string' },
-    steps: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          title: { type: 'string' },
-          questions: { type: 'array', items: questionSchema },
-        },
-        required: ['title', 'questions'],
-        additionalProperties: false,
-      },
-    },
-  },
-  required: ['title', 'description', 'steps'],
-  additionalProperties: false,
-};
+import { runAgentTurn, type FormPlan } from '../agent.js';
+import { createConversation, getConversation, deleteConversation, type ConversationState } from '../agentConversations.js';
 
 export default async function aiRoutes(app: FastifyInstance) {
   // Rewrite a single question's label for clarity
@@ -95,27 +45,65 @@ export default async function aiRoutes(app: FastifyInstance) {
     }
   });
 
-  // Draft a full form structure from a prompt. Read-only — nothing is persisted
-  // until the caller reviews the plan and calls create-form.
-  app.post<{ Body: { prompt?: string } }>('/api/ai/plan-form', { preHandler: requireAuth }, async (req, reply) => {
-    const prompt = req.body?.prompt?.trim();
-    if (!prompt) return reply.status(400).send({ error: 'prompt is required' });
+  // Draft a full form structure from a prompt, streamed live over SSE as an
+  // agentic pipeline (analyze -> outline -> build). May pause mid-pipeline to
+  // ask the user a clarifying question — resume by POSTing again with the
+  // same conversationId and the answer as `message`. Nothing is persisted
+  // until the caller reviews the final plan and calls create-form.
+  app.post<{ Body: { conversationId?: string; message?: string } }>(
+    '/api/ai/plan-form',
+    { preHandler: requireAuth },
+    async (req, reply) => {
+      const message = req.body?.message?.trim();
+      if (!message) return reply.status(400).send({ error: 'message is required' });
 
-    try {
-      const plan = await askClaudeJSON<FormPlan>({
-        system: 'You are a form-design assistant. Given a description of a form, design its structure: a concise title, a one-sentence description, and the full set of questions.\n\n' +
-          'If the form covers several distinct topics or would end up long, split it into multiple logical steps (e.g. "Basic Info", "Preferences", "Payment"), each with a short title and 2-6 questions, ordered the way a respondent would naturally want to answer them. If the form is small and focused on one topic, use a single step.\n\n' +
-          'Use "text" for open-ended answers, "multiple_choice" for a fixed set of choices (provide 2-6 options for these), and "file_upload" for file, document, or image submissions. Only mark a question required when skipping it would make the response unusable.',
-        prompt,
-        schema: formPlanSchema,
-        effort: 'medium',
-        maxTokens: 8192,
+      let state: ConversationState;
+      if (req.body?.conversationId) {
+        const existing = getConversation(req.body.conversationId, req.userId!);
+        if (!existing || existing.phase !== 'awaiting_clarification') {
+          return reply.status(404).send({ error: 'Conversation not found or expired. Please start over.' });
+        }
+        existing.clarificationAnswer = message;
+        state = existing;
+      } else {
+        state = createConversation(req.userId!, message);
+      }
+
+      reply.hijack();
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
       });
-      return { plan };
-    } catch (e: any) {
-      return reply.status(502).send({ error: e.message });
+
+      const send = (event: string, data: object) => {
+        reply.raw.write(`event: ${event}\ndata: ${JSON.stringify({ conversationId: state.id, ...data })}\n\n`);
+      };
+
+      const controller = new AbortController();
+      let finished = false;
+      reply.raw.on('close', () => {
+        if (!finished) {
+          controller.abort();
+          deleteConversation(state.id);
+        }
+      });
+
+      try {
+        await runAgentTurn(state, (e) => send(e.type, e), controller.signal);
+        if (state.phase === 'done') deleteConversation(state.id);
+      } catch (e: any) {
+        if (!controller.signal.aborted) send('error', { message: e.message ?? 'The AI request failed.' });
+      } finally {
+        if (!controller.signal.aborted) {
+          finished = true;
+          send('done', {});
+          reply.raw.end();
+        }
+      }
     }
-  });
+  );
 
   // Materialize an approved plan into a real form. No AI call here — the plan
   // was already reviewed by the user, this just persists it.
