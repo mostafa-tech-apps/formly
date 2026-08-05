@@ -13,10 +13,54 @@ const UPLOADS_DIR = path.join(__dirname, '..', '..', 'uploads');
 // Ensure uploads directory exists
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
+const submissionExample = { id: 'sub_5RtKq8NpXz', form_id: 'frm_9kLp3XqZ7Y', submitted_at: '2026-08-05T12:10:00.000Z' };
+const answerExample = {
+  id: 'ans_1LmZp4TqRx', submission_id: 'sub_5RtKq8NpXz', question_id: 'qst_7YbNc3RtLk',
+  value: 'Jane Doe', file_path: null, file_name: null,
+  question_label: "What's your name?", question_type: 'text', question_options: '[]',
+};
+const formNotFoundResponse = {
+  description: 'Form not found',
+  type: 'object' as const,
+  additionalProperties: true,
+  properties: { error: { type: 'string' } },
+  examples: [{ error: 'Form not found' }],
+};
+
 export default async function submissionRoutes(app: FastifyInstance) {
   // Submit a form (public, multipart)
   app.post<{ Params: { slug: string } }>(
     '/api/forms/public/:slug/submit',
+    {
+      schema: {
+        summary: 'Submit a response to a published form (no auth)',
+        description: 'multipart/form-data — one field per question, named by the question\'s ID (e.g. `qst_7YbNc3RtLk=Jane Doe`); file_upload questions send the file itself under that field name.',
+        consumes: ['multipart/form-data'],
+        response: {
+          200: {
+            description: 'Recorded',
+            type: 'object',
+            additionalProperties: true,
+            properties: { success: { type: 'boolean' }, submissionId: { type: 'string' } },
+            examples: [{ success: true, submissionId: submissionExample.id }],
+          },
+          400: {
+            description: 'A required question was left blank',
+            type: 'object',
+            additionalProperties: true,
+            properties: { error: { type: 'string' }, questionId: { type: 'string' } },
+            examples: [{ error: 'Question "What\'s your name?" is required', questionId: 'qst_7YbNc3RtLk' }],
+          },
+          404: {
+            description: 'Unknown slug or the form is unpublished',
+            type: 'object',
+            additionalProperties: true,
+            properties: { error: { type: 'string' } },
+            examples: [{ error: 'Form not found or not published' }],
+          },
+        },
+      },
+    },
     async (req, reply) => {
       const form = await db.get(
         `SELECT * FROM forms WHERE slug = ? AND status = 'published'`, [req.params.slug]
@@ -121,7 +165,29 @@ export default async function submissionRoutes(app: FastifyInstance) {
   // List submissions for a form
   app.get<{ Params: { id: string } }>(
     '/api/forms/:id/submissions',
-    { preHandler: requireAuth },
+    {
+      preHandler: requireAuth,
+      schema: {
+        summary: 'List a form\'s submissions',
+        description: 'Each submission includes a preview of up to 3 answers.',
+        response: {
+          200: {
+            description: 'Submissions, most recent first',
+            type: 'object',
+            additionalProperties: true,
+            properties: { submissions: { type: 'array', items: { type: 'object', additionalProperties: true } } },
+            examples: [{
+              submissions: [{
+                ...submissionExample,
+                answer_count: 2,
+                preview: [{ label: "What's your name?", value: 'Jane Doe', file_name: null, type: 'text' }],
+              }],
+            }],
+          },
+          404: formNotFoundResponse,
+        },
+      },
+    },
     async (req, reply) => {
       const form = await db.get(`SELECT * FROM forms WHERE id = ? AND user_id = ?`, [req.params.id, req.userId]);
       if (!form) {
@@ -158,7 +224,31 @@ export default async function submissionRoutes(app: FastifyInstance) {
   // Get a single submission with all answers
   app.get<{ Params: { id: string; submissionId: string } }>(
     '/api/forms/:id/submissions/:submissionId',
-    { preHandler: requireAuth },
+    {
+      preHandler: requireAuth,
+      schema: {
+        summary: 'Get a single submission with all its answers',
+        response: {
+          200: {
+            description: 'The submission and every answer',
+            type: 'object',
+            additionalProperties: true,
+            properties: {
+              submission: { type: 'object', additionalProperties: true },
+              answers: { type: 'array', items: { type: 'object', additionalProperties: true } },
+            },
+            examples: [{ submission: submissionExample, answers: [answerExample] }],
+          },
+          404: {
+            description: 'Form or submission not found',
+            type: 'object',
+            additionalProperties: true,
+            properties: { error: { type: 'string' } },
+            examples: [{ error: 'Submission not found' }],
+          },
+        },
+      },
+    },
     async (req, reply) => {
       const form = await db.get(`SELECT id FROM forms WHERE id = ? AND user_id = ?`, [req.params.id, req.userId]);
       if (!form) {

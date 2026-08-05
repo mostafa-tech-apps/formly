@@ -7,10 +7,44 @@ import { runAgentTurn, type FormPlan } from '../agent.js';
 import { createConversation, getConversation, deleteConversation, type ConversationState } from '../agentConversations.js';
 import { INJECTION_GUARDRAIL, wrapUntrusted } from '../promptSafety.js';
 
+const unconfiguredResponse = {
+  description: 'OPENROUTER_API_KEY is not set on the server, or the AI call failed',
+  type: 'object' as const,
+  additionalProperties: true,
+  properties: { error: { type: 'string' } },
+  examples: [{ error: 'AI features are not configured on this server (missing OPENROUTER_API_KEY).' }],
+};
+
 export default async function aiRoutes(app: FastifyInstance) {
   // Rewrite a single question's label for clarity
   app.post<{ Body: { label?: string } }>('/api/ai/improve-question', {
     preHandler: requireAuth,
+    schema: {
+      summary: 'Rewrite a question label for clarity',
+      body: {
+        type: 'object',
+        additionalProperties: true,
+        properties: { label: { type: 'string' } },
+        examples: [{ label: 'whats ur name' }],
+      },
+      response: {
+        200: {
+          description: 'The rewritten label',
+          type: 'object',
+          additionalProperties: true,
+          properties: { label: { type: 'string' } },
+          examples: [{ label: 'What is your name?' }],
+        },
+        400: {
+          description: 'label is missing',
+          type: 'object',
+          additionalProperties: true,
+          properties: { error: { type: 'string' } },
+          examples: [{ error: 'label is required' }],
+        },
+        502: unconfiguredResponse,
+      },
+    },
     config: { rateLimit: { max: 30, timeWindow: '10 minutes' } },
   }, async (req, reply) => {
     const label = req.body?.label?.trim();
@@ -31,6 +65,32 @@ export default async function aiRoutes(app: FastifyInstance) {
   // Suggest multiple-choice options for a question
   app.post<{ Body: { label?: string } }>('/api/ai/suggest-options', {
     preHandler: requireAuth,
+    schema: {
+      summary: 'Suggest multiple-choice options for a question',
+      body: {
+        type: 'object',
+        additionalProperties: true,
+        properties: { label: { type: 'string' } },
+        examples: [{ label: 'How did you hear about us?' }],
+      },
+      response: {
+        200: {
+          description: '3-6 suggested options',
+          type: 'object',
+          additionalProperties: true,
+          properties: { options: { type: 'array', items: { type: 'string' } } },
+          examples: [{ options: ['Social media', 'Friend or colleague', 'Search engine', 'Advertisement', 'Other'] }],
+        },
+        400: {
+          description: 'label is missing',
+          type: 'object',
+          additionalProperties: true,
+          properties: { error: { type: 'string' } },
+          examples: [{ error: 'label is required' }],
+        },
+        502: unconfiguredResponse,
+      },
+    },
     config: { rateLimit: { max: 30, timeWindow: '10 minutes' } },
   }, async (req, reply) => {
     const label = req.body?.label?.trim();
@@ -57,6 +117,19 @@ export default async function aiRoutes(app: FastifyInstance) {
     '/api/ai/plan-form',
     {
       preHandler: requireAuth,
+      schema: {
+        summary: 'Draft a form from a text prompt (SSE)',
+        description: 'Response is `text/event-stream`, not JSON — events are `step`, `question` (pauses for clarification; resume by POSTing again with the same `conversationId` and the answer as `message`), `plan` (the final FormPlan, ready for create-form), `error`, and `done`. Makes no database writes.',
+        body: {
+          type: 'object',
+          additionalProperties: true,
+          properties: {
+            conversationId: { type: 'string', description: 'Omit to start a new conversation' },
+            message: { type: 'string' },
+          },
+          examples: [{ message: 'A customer feedback form for a bakery, asking about their order, food quality, and whether they\'d recommend us.' }],
+        },
+      },
       config: { rateLimit: { max: 10, timeWindow: '10 minutes' } },
     },
     async (req, reply) => {
@@ -115,6 +188,46 @@ export default async function aiRoutes(app: FastifyInstance) {
   // was already reviewed by the user, this just persists it.
   app.post<{ Body: FormPlan }>('/api/ai/create-form', {
     preHandler: requireAuth,
+    schema: {
+      summary: 'Persist an AI-drafted plan as a real form',
+      description: 'No AI call here — just materializes an already-reviewed plan from plan-form\'s final `plan` event. Multiple steps become real steps; a single step is flattened.',
+      body: {
+        type: 'object',
+        additionalProperties: true,
+        properties: {
+          title: { type: 'string' },
+          description: { type: 'string' },
+          steps: { type: 'array', items: { type: 'object', additionalProperties: true } },
+        },
+        examples: [{
+          title: 'Bakery Feedback',
+          description: 'Tell us about your recent order',
+          steps: [{
+            title: 'Your Order',
+            questions: [
+              { type: 'text', label: 'What did you order?', required: true, options: [] },
+              { type: 'multiple_choice', label: 'How would you rate the food quality?', required: true, options: ['Excellent', 'Good', 'Average', 'Poor'] },
+            ],
+          }],
+        }],
+      },
+      response: {
+        200: {
+          description: 'The created (draft) form',
+          type: 'object',
+          additionalProperties: true,
+          properties: { form: { type: 'object', additionalProperties: true } },
+          examples: [{ form: { id: 'frm_9kLp3XqZ7Y', user_id: 'usr_8gT2mQliX9', title: 'Bakery Feedback', description: 'Tell us about your recent order', status: 'draft', slug: null, created_at: '2026-08-05T12:00:00.000Z', updated_at: '2026-08-05T12:00:00.000Z' } }],
+        },
+        400: {
+          description: 'title or steps missing',
+          type: 'object',
+          additionalProperties: true,
+          properties: { error: { type: 'string' } },
+          examples: [{ error: 'title and steps are required' }],
+        },
+      },
+    },
     config: { rateLimit: { max: 20, timeWindow: '10 minutes' } },
   }, async (req, reply) => {
     const { title, description, steps } = req.body ?? {};

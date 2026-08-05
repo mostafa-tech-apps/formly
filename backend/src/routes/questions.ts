@@ -16,11 +16,58 @@ interface ReorderBody {
   questionIds: string[];
 }
 
+const textQuestionExample = {
+  id: 'qst_7YbNc3RtLk', form_id: 'frm_9kLp3XqZ7Y', step_id: 'stp_4mZtR7vPq2',
+  type: 'text', label: "What's your name?", required: 1, options: '[]', order_index: 0,
+  visibility_rules: null, created_at: '2026-08-05T12:00:00.000Z',
+};
+const choiceQuestionExample = {
+  id: 'qst_2XpQz9WmVh', form_id: 'frm_9kLp3XqZ7Y', step_id: 'stp_4mZtR7vPq2',
+  type: 'multiple_choice', label: 'How did you hear about us?', required: 0,
+  options: '["Social media","Friend or colleague","Search engine","Other"]', order_index: 1,
+  visibility_rules: null, created_at: '2026-08-05T12:00:00.000Z',
+};
+const questionBodySchema = {
+  type: 'object' as const,
+  additionalProperties: true,
+  properties: {
+    type: { type: 'string', enum: ['text', 'multiple_choice', 'file_upload'] },
+    label: { type: 'string' },
+    required: { type: 'boolean' },
+    options: { type: 'array', items: { type: 'string' } },
+    visibility_rules: { type: 'object', additionalProperties: true, nullable: true },
+    step_id: { type: 'string', nullable: true },
+  },
+};
+const formNotFoundResponse = {
+  description: 'Form not found',
+  type: 'object' as const,
+  additionalProperties: true,
+  properties: { error: { type: 'string' } },
+  examples: [{ error: 'Form not found' }],
+};
+
 export default async function questionRoutes(app: FastifyInstance) {
   // Add a question to a form
   app.post<{ Params: { formId: string }; Body: QuestionBody }>(
     '/api/forms/:formId/questions',
-    { preHandler: requireAuth },
+    {
+      preHandler: requireAuth,
+      schema: {
+        summary: 'Add a question to a form',
+        body: { ...questionBodySchema, examples: [{ type: 'multiple_choice', label: 'How did you hear about us?', required: false, options: ['Social media', 'Friend or colleague', 'Search engine', 'Other'] }] },
+        response: {
+          200: {
+            description: 'The new question',
+            type: 'object',
+            additionalProperties: true,
+            properties: { question: { type: 'object', additionalProperties: true } },
+            examples: [{ question: choiceQuestionExample }],
+          },
+          404: formNotFoundResponse,
+        },
+      },
+    },
     async (req, reply) => {
       const form = await db.get(`SELECT * FROM forms WHERE id = ? AND user_id = ?`, [req.params.formId, req.userId]);
       if (!form) {
@@ -61,7 +108,30 @@ export default async function questionRoutes(app: FastifyInstance) {
   // Update a question
   app.put<{ Params: { formId: string; questionId: string }; Body: QuestionBody }>(
     '/api/forms/:formId/questions/:questionId',
-    { preHandler: requireAuth },
+    {
+      preHandler: requireAuth,
+      schema: {
+        summary: 'Update a question',
+        description: 'Any field omitted is left unchanged.',
+        body: { ...questionBodySchema, examples: [{ label: "What's your full name?", required: true }] },
+        response: {
+          200: {
+            description: 'The updated question',
+            type: 'object',
+            additionalProperties: true,
+            properties: { question: { type: 'object', additionalProperties: true } },
+            examples: [{ question: textQuestionExample }],
+          },
+          404: {
+            description: 'Form or question not found',
+            type: 'object',
+            additionalProperties: true,
+            properties: { error: { type: 'string' } },
+            examples: [{ error: 'Question not found' }],
+          },
+        },
+      },
+    },
     async (req, reply) => {
       const form = await db.get(`SELECT id FROM forms WHERE id = ? AND user_id = ?`, [req.params.formId, req.userId]);
       if (!form) {
@@ -124,7 +194,30 @@ export default async function questionRoutes(app: FastifyInstance) {
   // Delete a question
   app.delete<{ Params: { formId: string; questionId: string } }>(
     '/api/forms/:formId/questions/:questionId',
-    { preHandler: requireAuth },
+    {
+      preHandler: requireAuth,
+      schema: {
+        summary: 'Delete a question',
+        description: 'Blocked with 400 if this is the last question of an already-published form.',
+        response: {
+          200: {
+            description: 'Deleted',
+            type: 'object',
+            additionalProperties: true,
+            properties: { success: { type: 'boolean' } },
+            examples: [{ success: true }],
+          },
+          400: {
+            description: 'This is the last question of a published form',
+            type: 'object',
+            additionalProperties: true,
+            properties: { error: { type: 'string' } },
+            examples: [{ error: 'A published form must have at least one question. Change it to Draft first to remove all questions.' }],
+          },
+          404: formNotFoundResponse,
+        },
+      },
+    },
     async (req, reply) => {
       const form = await db.get<{ status: string }>(`SELECT status FROM forms WHERE id = ? AND user_id = ?`, [req.params.formId, req.userId]);
       if (!form) {
@@ -166,7 +259,29 @@ export default async function questionRoutes(app: FastifyInstance) {
   // Reorder questions
   app.put<{ Params: { formId: string }; Body: ReorderBody }>(
     '/api/forms/:formId/questions/reorder',
-    { preHandler: requireAuth },
+    {
+      preHandler: requireAuth,
+      schema: {
+        summary: 'Reorder a form\'s questions',
+        description: 'Full replacement — pass every question ID for the form, in the desired order.',
+        body: {
+          type: 'object',
+          additionalProperties: true,
+          properties: { questionIds: { type: 'array', items: { type: 'string' } } },
+          examples: [{ questionIds: [choiceQuestionExample.id, textQuestionExample.id] }],
+        },
+        response: {
+          200: {
+            description: 'Questions in their new order',
+            type: 'object',
+            additionalProperties: true,
+            properties: { questions: { type: 'array', items: { type: 'object', additionalProperties: true } } },
+            examples: [{ questions: [choiceQuestionExample, textQuestionExample] }],
+          },
+          404: formNotFoundResponse,
+        },
+      },
+    },
     async (req, reply) => {
       const form = await db.get(`SELECT id FROM forms WHERE id = ? AND user_id = ?`, [req.params.formId, req.userId]);
       if (!form) {

@@ -15,11 +15,42 @@ function ownedForm(formId: string, userId: string | undefined) {
   return db.get(`SELECT id FROM forms WHERE id = ? AND user_id = ?`, [formId, userId]);
 }
 
+const stepExample = { id: 'stp_4mZtR7vPq2', form_id: 'frm_9kLp3XqZ7Y', title: 'Basic Info', order_index: 0, created_at: '2026-08-05T12:00:00.000Z' };
+const secondStepExample = { id: 'stp_6qWnJ2LxTb', form_id: 'frm_9kLp3XqZ7Y', title: 'Feedback', order_index: 1, created_at: '2026-08-05T12:05:00.000Z' };
+const formNotFoundResponse = {
+  description: 'Form not found',
+  type: 'object' as const,
+  additionalProperties: true,
+  properties: { error: { type: 'string' } },
+  examples: [{ error: 'Form not found' }],
+};
+
 export default async function stepRoutes(app: FastifyInstance) {
   // Add a step to a form
   app.post<{ Params: { formId: string }; Body: StepBody }>(
     '/api/forms/:formId/steps',
-    { preHandler: requireAuth },
+    {
+      preHandler: requireAuth,
+      schema: {
+        summary: 'Add a step to a form',
+        body: {
+          type: 'object',
+          additionalProperties: true,
+          properties: { title: { type: 'string' } },
+          examples: [{ title: 'Feedback' }],
+        },
+        response: {
+          200: {
+            description: 'The new step',
+            type: 'object',
+            additionalProperties: true,
+            properties: { step: { type: 'object', additionalProperties: true } },
+            examples: [{ step: secondStepExample }],
+          },
+          404: formNotFoundResponse,
+        },
+      },
+    },
     async (req, reply) => {
       if (!(await ownedForm(req.params.formId, req.userId))) {
         return reply.status(404).send({ error: 'Form not found' });
@@ -42,7 +73,34 @@ export default async function stepRoutes(app: FastifyInstance) {
   // Rename a step
   app.put<{ Params: { formId: string; stepId: string }; Body: StepBody }>(
     '/api/forms/:formId/steps/:stepId',
-    { preHandler: requireAuth },
+    {
+      preHandler: requireAuth,
+      schema: {
+        summary: 'Rename a step',
+        body: {
+          type: 'object',
+          additionalProperties: true,
+          properties: { title: { type: 'string' } },
+          examples: [{ title: 'Basic Info' }],
+        },
+        response: {
+          200: {
+            description: 'The updated step',
+            type: 'object',
+            additionalProperties: true,
+            properties: { step: { type: 'object', additionalProperties: true } },
+            examples: [{ step: stepExample }],
+          },
+          404: {
+            description: 'Form or step not found',
+            type: 'object',
+            additionalProperties: true,
+            properties: { error: { type: 'string' } },
+            examples: [{ error: 'Step not found' }],
+          },
+        },
+      },
+    },
     async (req, reply) => {
       if (!(await ownedForm(req.params.formId, req.userId))) {
         return reply.status(404).send({ error: 'Form not found' });
@@ -62,7 +120,29 @@ export default async function stepRoutes(app: FastifyInstance) {
   // become unassigned (step_id = NULL) if it was the first/only step.
   app.delete<{ Params: { formId: string; stepId: string } }>(
     '/api/forms/:formId/steps/:stepId',
-    { preHandler: requireAuth },
+    {
+      preHandler: requireAuth,
+      schema: {
+        summary: 'Delete a step',
+        description: "Its questions fall back to the nearest preceding step, or become unassigned if it was the first/only step.",
+        response: {
+          200: {
+            description: 'Deleted',
+            type: 'object',
+            additionalProperties: true,
+            properties: { success: { type: 'boolean' } },
+            examples: [{ success: true }],
+          },
+          404: {
+            description: 'Form or step not found',
+            type: 'object',
+            additionalProperties: true,
+            properties: { error: { type: 'string' } },
+            examples: [{ error: 'Step not found' }],
+          },
+        },
+      },
+    },
     async (req, reply) => {
       if (!(await ownedForm(req.params.formId, req.userId))) {
         return reply.status(404).send({ error: 'Form not found' });
@@ -90,7 +170,29 @@ export default async function stepRoutes(app: FastifyInstance) {
   // Reorder steps
   app.put<{ Params: { formId: string }; Body: ReorderBody }>(
     '/api/forms/:formId/steps/reorder',
-    { preHandler: requireAuth },
+    {
+      preHandler: requireAuth,
+      schema: {
+        summary: "Reorder a form's steps",
+        description: 'Full replacement — pass every step ID for the form, in the desired order.',
+        body: {
+          type: 'object',
+          additionalProperties: true,
+          properties: { stepIds: { type: 'array', items: { type: 'string' } } },
+          examples: [{ stepIds: [stepExample.id, secondStepExample.id] }],
+        },
+        response: {
+          200: {
+            description: 'Steps in their new order',
+            type: 'object',
+            additionalProperties: true,
+            properties: { steps: { type: 'array', items: { type: 'object', additionalProperties: true } } },
+            examples: [{ steps: [stepExample, secondStepExample] }],
+          },
+          404: formNotFoundResponse,
+        },
+      },
+    },
     async (req, reply) => {
       if (!(await ownedForm(req.params.formId, req.userId))) {
         return reply.status(404).send({ error: 'Form not found' });
