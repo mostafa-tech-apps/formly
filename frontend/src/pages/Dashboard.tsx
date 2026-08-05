@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, FileText, Trash2, ExternalLink, Link2, BarChart3, LayoutGrid, LayoutList, AlertTriangle, Sparkles } from 'lucide-react';
 import { api } from '../api/client';
 import type { Form } from '../types';
-import GenerateFormModal from '../components/GenerateFormModal';
+import GenerateFormTray from '../components/GenerateFormTray';
 
 function ConfirmModal({ title, message, onConfirm, onCancel }: {
   title: string;
@@ -216,7 +216,7 @@ export default function Dashboard() {
       )}
 
       {showGenerate && (
-        <GenerateFormModal onClose={() => setShowGenerate(false)} onCreated={onFormGenerated} />
+        <GenerateFormTray onClose={() => setShowGenerate(false)} onCreated={onFormGenerated} />
       )}
 
       {toast && <div className={`toast toast-${toast.type}`}>{toast.msg}</div>}

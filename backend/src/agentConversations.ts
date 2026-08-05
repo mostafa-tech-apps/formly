@@ -4,7 +4,7 @@ import type { Analysis, Outline } from './agent.js';
 export interface ConversationState {
   id: string;
   userId: string;
-  phase: 'new' | 'awaiting_clarification' | 'outlining' | 'building' | 'done';
+  phase: 'new' | 'awaiting_clarification' | 'thinking' | 'planning' | 'done';
   prompt: string;
   analysis?: Analysis;
   outline?: Outline;

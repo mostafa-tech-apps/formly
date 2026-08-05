@@ -123,7 +123,7 @@ export async function buildFullPlan(
 }
 
 export interface ConversationStateLike {
-  phase: 'new' | 'awaiting_clarification' | 'outlining' | 'building' | 'done';
+  phase: 'new' | 'awaiting_clarification' | 'thinking' | 'planning' | 'done';
   prompt: string;
   analysis?: Analysis;
   outline?: Outline;
@@ -131,7 +131,7 @@ export interface ConversationStateLike {
 }
 
 export type AgentEvent =
-  | { type: 'step'; phase: 'analyzing' | 'outlining' | 'building'; status: 'start' | 'done'; label: string }
+  | { type: 'step'; phase: 'understanding' | 'thinking' | 'planning'; status: 'start' | 'done'; label: string }
   | { type: 'question'; questions: string[] }
   | { type: 'plan'; plan: FormPlan };
 
@@ -141,36 +141,36 @@ export async function runAgentTurn(
   signal: AbortSignal,
 ): Promise<void> {
   if (state.phase === 'new') {
-    onEvent({ type: 'step', phase: 'analyzing', status: 'start', label: 'Understanding your request…' });
+    onEvent({ type: 'step', phase: 'understanding', status: 'start', label: 'Understanding your request…' });
     const analysis = await analyzePurpose({ prompt: state.prompt }, signal);
     state.analysis = analysis;
-    onEvent({ type: 'step', phase: 'analyzing', status: 'done', label: 'Understood the purpose and domain' });
+    onEvent({ type: 'step', phase: 'understanding', status: 'done', label: 'Understood the purpose and domain' });
 
     if (analysis.clarifyingQuestions.length > 0) {
       state.phase = 'awaiting_clarification';
       onEvent({ type: 'question', questions: analysis.clarifyingQuestions });
       return;
     }
-    state.phase = 'outlining';
+    state.phase = 'thinking';
   } else if (state.phase === 'awaiting_clarification') {
-    state.phase = 'outlining';
+    state.phase = 'thinking';
   }
 
-  onEvent({ type: 'step', phase: 'outlining', status: 'start', label: 'Drafting the plan outline…' });
+  onEvent({ type: 'step', phase: 'thinking', status: 'start', label: 'Thinking through the structure…' });
   const outline = await draftOutline(
     { prompt: state.prompt, analysis: state.analysis!, clarificationAnswer: state.clarificationAnswer },
     signal,
   );
   state.outline = outline;
-  state.phase = 'building';
-  onEvent({ type: 'step', phase: 'outlining', status: 'done', label: 'Outlined the form structure' });
+  state.phase = 'planning';
+  onEvent({ type: 'step', phase: 'thinking', status: 'done', label: 'Structured the form' });
 
-  onEvent({ type: 'step', phase: 'building', status: 'start', label: 'Building the full question set…' });
+  onEvent({ type: 'step', phase: 'planning', status: 'start', label: 'Planning the full question set…' });
   const plan = await buildFullPlan(
     { prompt: state.prompt, analysis: state.analysis!, outline: state.outline!, clarificationAnswer: state.clarificationAnswer },
     signal,
   );
-  onEvent({ type: 'step', phase: 'building', status: 'done', label: 'Finished building the plan' });
+  onEvent({ type: 'step', phase: 'planning', status: 'done', label: 'Finished planning the form' });
   state.phase = 'done';
   onEvent({ type: 'plan', plan });
 }
