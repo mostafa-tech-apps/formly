@@ -110,20 +110,20 @@ export default function Dashboard() {
           <p className="page-subtitle">{forms.length} form{forms.length !== 1 ? 's' : ''} created</p>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <div className="view-toggle">
-            <button
-              className={`view-toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
-              onClick={() => { setViewMode('list'); localStorage.setItem('dashboard-view', 'list'); }}
-              title="List view"
-            ><LayoutList size={16} /></button>
-            <button
-              className={`view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
-              onClick={() => { setViewMode('grid'); localStorage.setItem('dashboard-view', 'grid'); }}
-              title="Grid view"
-            ><LayoutGrid size={16} /></button>
-          </div>
           {forms.length > 0 && (
             <>
+              <div className="view-toggle">
+                <button
+                  className={`view-toggle-btn ${viewMode === 'list' ? 'active' : ''}`}
+                  onClick={() => { setViewMode('list'); localStorage.setItem('dashboard-view', 'list'); }}
+                  title="List view"
+                ><LayoutList size={16} /></button>
+                <button
+                  className={`view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                  onClick={() => { setViewMode('grid'); localStorage.setItem('dashboard-view', 'grid'); }}
+                  title="Grid view"
+                ><LayoutGrid size={16} /></button>
+              </div>
               <button className="btn btn-secondary" onClick={() => setShowGenerate(true)}>
                 <Sparkles size={16} /> Generate with AI
               </button>
