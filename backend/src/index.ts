@@ -4,6 +4,7 @@ import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
+import rateLimit from '@fastify/rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -18,6 +19,7 @@ import aiRoutes from './routes/ai.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = Fastify({
+  trustProxy: true, // needed for accurate req.ip-based rate limiting behind Render's proxy
   logger: {
     transport: {
       target: 'pino-pretty',
@@ -33,6 +35,13 @@ await app.register(cors, {
 });
 
 await app.register(cookie);
+
+// Global baseline — generous, just anti-abuse. Individual routes (esp. the
+// AI ones, which cost real tokens) set their own tighter limits below.
+await app.register(rateLimit, {
+  max: 300,
+  timeWindow: '5 minutes',
+});
 
 await app.register(multipart, {
   limits: {

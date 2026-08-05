@@ -25,7 +25,9 @@ const COOKIE_OPTIONS = {
 };
 
 export default async function authRoutes(app: FastifyInstance) {
-  app.post<{ Body: AuthBody }>('/api/auth/signup', async (req, reply) => {
+  app.post<{ Body: AuthBody }>('/api/auth/signup', {
+    config: { rateLimit: { max: 30, timeWindow: '10 minutes' } },
+  }, async (req, reply) => {
     const { email, password } = req.body;
     if (!email || !password) {
       return reply.status(400).send({ error: 'Email and password are required' });
@@ -47,7 +49,9 @@ export default async function authRoutes(app: FastifyInstance) {
     return { user: { id, email } };
   });
 
-  app.post<{ Body: AuthBody }>('/api/auth/login', async (req, reply) => {
+  app.post<{ Body: AuthBody }>('/api/auth/login', {
+    config: { rateLimit: { max: 30, timeWindow: '10 minutes' } },
+  }, async (req, reply) => {
     const { email, password } = req.body;
     if (!email || !password) {
       return reply.status(400).send({ error: 'Email and password are required' });

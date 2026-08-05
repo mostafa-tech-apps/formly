@@ -1,6 +1,7 @@
 import { ChatAnthropic } from '@langchain/anthropic';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { z } from 'zod';
+import { INJECTION_GUARDRAIL, wrapUntrusted } from './promptSafety.js';
 
 let model: ChatAnthropic | null = null;
 
@@ -53,10 +54,10 @@ const outlineSchema = z.object({
 export type Outline = z.infer<typeof outlineSchema>;
 
 function contextBlock(input: { prompt: string; analysis?: Analysis; outline?: Outline; clarificationAnswer?: string }): string {
-  const parts = [`Form request: ${input.prompt}`];
+  const parts = [wrapUntrusted('Form request', input.prompt)];
   if (input.analysis) parts.push(`Prior analysis: ${JSON.stringify(input.analysis)}`);
   if (input.outline) parts.push(`Prior outline: ${JSON.stringify(input.outline)}`);
-  if (input.clarificationAnswer) parts.push(`User's answer to your clarifying question(s): ${input.clarificationAnswer}`);
+  if (input.clarificationAnswer) parts.push(wrapUntrusted("User's answer to your clarifying question(s)", input.clarificationAnswer));
   return parts.join('\n\n');
 }
 
@@ -79,7 +80,7 @@ export async function analyzePurpose(
     'You are a form-design assistant. Read the user\'s form request and identify its purpose, domain/sector, and ' +
       'intended audience. Only ask clarifying questions if the request is genuinely too ambiguous to design a ' +
       'sensible form from (e.g. missing a key detail that would change the structure) — most requests are clear ' +
-      'enough to proceed without any. Leave clarifyingQuestions empty when in doubt.',
+      'enough to proceed without any. Leave clarifyingQuestions empty when in doubt.\n\n' + INJECTION_GUARDRAIL,
     analysisSchema,
     'analysis',
     contextBlock(input),
@@ -97,7 +98,7 @@ export async function draftOutline(
       'covers several distinct topics or would end up long, split it into multiple steps (e.g. "Basic Info", ' +
       '"Preferences", "Payment"), each with a short title and a one-sentence summary of what it covers, ordered the ' +
       'way a respondent would naturally want to answer them. If the form is small and focused on one topic, use a ' +
-      'single step.',
+      'single step.\n\n' + INJECTION_GUARDRAIL,
     outlineSchema,
     'outline',
     contextBlock(input),
@@ -114,7 +115,8 @@ export async function buildFullPlan(
       'produce the full form structure: the final title, description, and steps, each filled in with its complete ' +
       'set of questions. Use "text" for open-ended answers, "multiple_choice" for a fixed set of choices (provide ' +
       '2-6 options for these), and "file_upload" for file, document, or image submissions. Only mark a question ' +
-      'required when skipping it would make the response unusable. Keep the step titles from the outline.',
+      'required when skipping it would make the response unusable. Keep the step titles from the outline. Question ' +
+      'labels and options must be plain text only — never include HTML, scripts, or markup.\n\n' + INJECTION_GUARDRAIL,
     formPlanSchema,
     'form_plan',
     contextBlock(input),

@@ -5,17 +5,21 @@ import { requireAuth } from '../auth.js';
 import { askClaudeJSON } from '../ai.js';
 import { runAgentTurn, type FormPlan } from '../agent.js';
 import { createConversation, getConversation, deleteConversation, type ConversationState } from '../agentConversations.js';
+import { INJECTION_GUARDRAIL, wrapUntrusted } from '../promptSafety.js';
 
 export default async function aiRoutes(app: FastifyInstance) {
   // Rewrite a single question's label for clarity
-  app.post<{ Body: { label?: string } }>('/api/ai/improve-question', { preHandler: requireAuth }, async (req, reply) => {
+  app.post<{ Body: { label?: string } }>('/api/ai/improve-question', {
+    preHandler: requireAuth,
+    config: { rateLimit: { max: 30, timeWindow: '10 minutes' } },
+  }, async (req, reply) => {
     const label = req.body?.label?.trim();
     if (!label) return reply.status(400).send({ error: 'label is required' });
 
     try {
       const result = await askClaudeJSON<{ label: string }>({
-        system: 'You improve form question wording. Rewrite the given question label to be clearer and more concise while preserving its original intent, tone, and level of formality. Return only the rewritten label, nothing else.',
-        prompt: label,
+        system: 'You improve form question wording. Rewrite the given question label to be clearer and more concise while preserving its original intent, tone, and level of formality. Return only the rewritten label, nothing else.\n\n' + INJECTION_GUARDRAIL,
+        prompt: wrapUntrusted('Question label', label),
         schema: { type: 'object', properties: { label: { type: 'string' } }, required: ['label'], additionalProperties: false },
         effort: 'low',
         maxTokens: 512,
@@ -27,14 +31,17 @@ export default async function aiRoutes(app: FastifyInstance) {
   });
 
   // Suggest multiple-choice options for a question
-  app.post<{ Body: { label?: string } }>('/api/ai/suggest-options', { preHandler: requireAuth }, async (req, reply) => {
+  app.post<{ Body: { label?: string } }>('/api/ai/suggest-options', {
+    preHandler: requireAuth,
+    config: { rateLimit: { max: 30, timeWindow: '10 minutes' } },
+  }, async (req, reply) => {
     const label = req.body?.label?.trim();
     if (!label) return reply.status(400).send({ error: 'label is required' });
 
     try {
       const result = await askClaudeJSON<{ options: string[] }>({
-        system: 'You suggest answer options for a multiple-choice form question. Given the question label, suggest 3 to 6 concise, mutually distinct options a respondent might choose. Cover the most likely real answers.',
-        prompt: label,
+        system: 'You suggest answer options for a multiple-choice form question. Given the question label, suggest 3 to 6 concise, mutually distinct options a respondent might choose. Cover the most likely real answers.\n\n' + INJECTION_GUARDRAIL,
+        prompt: wrapUntrusted('Question label', label),
         schema: { type: 'object', properties: { options: { type: 'array', items: { type: 'string' } } }, required: ['options'], additionalProperties: false },
         effort: 'low',
         maxTokens: 512,
@@ -52,7 +59,10 @@ export default async function aiRoutes(app: FastifyInstance) {
   // until the caller reviews the final plan and calls create-form.
   app.post<{ Body: { conversationId?: string; message?: string } }>(
     '/api/ai/plan-form',
-    { preHandler: requireAuth },
+    {
+      preHandler: requireAuth,
+      config: { rateLimit: { max: 10, timeWindow: '10 minutes' } },
+    },
     async (req, reply) => {
       const message = req.body?.message?.trim();
       if (!message) return reply.status(400).send({ error: 'message is required' });
@@ -107,7 +117,10 @@ export default async function aiRoutes(app: FastifyInstance) {
 
   // Materialize an approved plan into a real form. No AI call here — the plan
   // was already reviewed by the user, this just persists it.
-  app.post<{ Body: FormPlan }>('/api/ai/create-form', { preHandler: requireAuth }, async (req, reply) => {
+  app.post<{ Body: FormPlan }>('/api/ai/create-form', {
+    preHandler: requireAuth,
+    config: { rateLimit: { max: 20, timeWindow: '10 minutes' } },
+  }, async (req, reply) => {
     const { title, description, steps } = req.body ?? {};
     if (!title || !Array.isArray(steps)) {
       return reply.status(400).send({ error: 'title and steps are required' });
